@@ -1,5 +1,6 @@
 package com.flamingo.tiktaktoe.engine.mapper;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flamingo.tiktaktoe.common.CellState;
 import com.flamingo.tiktaktoe.common.GameState;
 import com.flamingo.tiktaktoe.common.GameStatus;
@@ -12,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class GameMapperTest {
 
-    private final GameMapper mapper = new GameMapper();
+    private final GameMapper mapper = new GameMapper(new ObjectMapper());
 
     @Test
     void toStateMapsAllFields() {

@@ -17,9 +17,14 @@ import java.util.List;
 @Component
 public class GameMapper {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
     private static final TypeReference<List<List<CellState>>> BOARD_TYPE = new TypeReference<>() {
     };
+
+    private final ObjectMapper objectMapper;
+
+    public GameMapper(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+    }
 
     public GameState toState(GameEntity entity) {
         List<List<CellState>> board = parseBoard(entity.getBoard());

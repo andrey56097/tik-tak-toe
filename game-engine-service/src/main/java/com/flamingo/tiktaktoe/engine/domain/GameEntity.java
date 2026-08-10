@@ -12,7 +12,7 @@ import jakarta.persistence.PrePersist;
 import java.util.UUID;
 
 /**
- * JPA entity for a game. The board is stored as JSON string; see {@link GameMapper}.
+ * JPA entity for a game. The board is stored as JSON string; see {@link com.flamingo.tiktaktoe.engine.mapper.GameMapper}.
  */
 @Entity
 public class GameEntity {

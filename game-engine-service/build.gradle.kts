@@ -59,6 +59,7 @@ tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
 
 tasks.named("check") {
     dependsOn(tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification"))
+    dependsOn(tasks.named("pitest"))
 }
 
 pitest {
@@ -68,4 +69,5 @@ pitest {
     outputFormats.set(setOf("XML", "HTML"))
     timestampedReports.set(false)
     verbose.set(true)
+    mutationThreshold.set(80)
 }

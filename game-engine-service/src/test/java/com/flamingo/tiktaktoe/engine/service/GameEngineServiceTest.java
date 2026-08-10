@@ -8,6 +8,7 @@ import com.flamingo.tiktaktoe.engine.validation.*;
 import com.flamingo.tiktaktoe.engine.exception.*;
 import com.flamingo.tiktaktoe.engine.mapper.*;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flamingo.tiktaktoe.common.CellState;
 import com.flamingo.tiktaktoe.common.GameState;
 import com.flamingo.tiktaktoe.common.GameStatus;
@@ -34,7 +35,7 @@ class GameEngineServiceTest {
     @BeforeEach
     void setUp() {
         repository = mock(GameRepository.class);
-        mapper = new GameMapper();
+        mapper = new GameMapper(new ObjectMapper());
         MoveValidator validator = new MoveValidator();
         WinnerChecker winnerChecker = new WinnerChecker();
         service = new GameEngineService(repository, mapper, validator, winnerChecker);
