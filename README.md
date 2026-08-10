@@ -6,7 +6,7 @@
 
 ![Java](https://img.shields.io/badge/Java-21-%23E34F26?style=for-the-badge&logo=openjdk&logoColor=white)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-%236DB33F?style=for-the-badge&logo=spring&logoColor=white)
-![Spring Cloud](https://img.shields.io/badge/Spring%20Cloud-2025.1.0-%236DB33F?style=for-the-badge&logo=spring&logoColor=white)
+![Spring Cloud](https://img.shields.io/badge/Spring%20Cloud-2025.1.2-%236DB33F?style=for-the-badge&logo=spring&logoColor=white)
 ![Gradle](https://img.shields.io/badge/Gradle-9.x-%2302303A?style=for-the-badge&logo=gradle&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)
 
@@ -89,7 +89,7 @@ The assignment is treated as a production-grade distributed system: layered serv
 |------|------|
 | **Language** | [Java 21 (LTS)](https://www.oracle.com/java/technologies/downloads/) |
 | **Framework** | [Spring Boot 4.1.x](https://spring.io/projects/spring-boot) |
-| **Cloud** | [Spring Cloud 2025.1.0 "Oakwood"](https://spring.io/projects/spring-cloud) — Eureka, Gateway |
+| **Cloud** | [Spring Cloud 2025.1.2 "Oakwood"](https://spring.io/projects/spring-cloud) — Eureka, Gateway |
 | **Data** | Spring Data JPA + [H2](https://www.h2database.com/) (in-memory) |
 | **Realtime** | WebSocket / STOMP / SockJS |
 | **HTTP Client** | Spring `WebClient` (reactive, `@LoadBalanced`) |

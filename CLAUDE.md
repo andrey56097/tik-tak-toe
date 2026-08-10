@@ -115,14 +115,15 @@ Concrete class names from the plan — use these when implementing or reviewing:
 ## Version gotchas (verified Aug 2026 — see plan)
 
 - **Don't pin** JUnit 5, Mockito, or H2 versions — they come managed via the Spring Boot BOM.
-- Gateway starter is now `spring-cloud-starter-gateway-server-webflux` (renamed in Spring Cloud 2025.1.0); the legacy `spring-cloud-starter-gateway` signals an outdated BOM.
+- **Spring Cloud must be 2025.1.2** (not 2025.1.0/2025.1.1) — 2025.1.0/2025.1.1 support only Spring Boot 4.0.x and fail with Boot 4.1.0 at startup.
+- Gateway starter is now `spring-cloud-starter-gateway-server-webflux` (renamed in Spring Cloud 2025.1.x); the legacy `spring-cloud-starter-gateway` signals an outdated BOM.
 - Resilience: use Spring Boot 4's built-in `@Retryable` / `@ConcurrencyLimit`; only add `resilience4j-spring-boot4` if a full Circuit Breaker is required.
 - H2 file mode (`jdbc:h2:file:./data/games`) is a one-line change when state recovery is needed.
 - **API docs via springdoc-openapi v3.x** — v2.x targets Boot 3 only. Artifact for our MVC services (Engine/Session): `org.springdoc:springdoc-openapi-starter-webmvc-ui`; Gateway would use `-webflux-ui`. Docs are per-service (KISS), exposed at `/v3/api-docs` + `/swagger-ui.html`.
 
 ## Project Facts
 
-- Java 21 (LTS), Spring Boot 4.1.x, Spring Cloud 2025.1.0 "Oakwood". Gradle wrapper (pinned), Kotlin DSL.
+- Java 21 (LTS), Spring Boot 4.1.x, Spring Cloud 2025.1.2 "Oakwood". Gradle wrapper (pinned), Kotlin DSL.
 - Package root: `com.flamingo.tiktaktoe`.
 - **Requirements source of truth:** `docs/task.md` — the assignment (home task). The plan (`docs/tic-tac-toe-plan.md`) is built on it and tracks it item-by-item; read **both** before large work. If plan and task ever disagree, `task.md` wins.
 - **Current scope: skeleton app (Milestone 0).** Roadmap: 1 Engine+H2 → 2 Eureka → 3 Session → 4 WebSocket → 5 UI → 6 Gateway → 7 Testing → 8 Docker → 9 Polish. Full detail in the plan.
