@@ -6,19 +6,33 @@ Markdown review to ai_review.md for the workflow to post as a PR comment.
 """
 import json
 import os
+import sys
 import time
 import urllib.error
 import urllib.request
 
-api_key = os.environ["OPENROUTER_API_KEY"]
+api_key = os.environ.get("OPENROUTER_API_KEY", "")
+if not api_key:
+    print("::error::OPENROUTER_API_KEY is not set. Add it to GitHub Secrets.", file=sys.stderr)
+    raise SystemExit(1)
+
 pr_title = os.environ.get("PR_TITLE", "")
+
+# Truncate the diff to stay within the model's context window. Free models
+# have limited context, so be generous but bounded. Signal truncation so the
+# model knows it's seeing a partial diff.
+MAX_DIFF_CHARS = 60000
 
 diff_path = "pr.diff"
 try:
     with open(diff_path, "r", encoding="utf-8") as f:
-        diff = f.read()[:20000]  # truncate to keep the request small
+        diff = f.read()
 except FileNotFoundError:
     diff = ""
+
+truncated = len(diff) > MAX_DIFF_CHARS
+if truncated:
+    diff = diff[:MAX_DIFF_CHARS]
 
 prompt = (
     "You are a senior code reviewer for a Java 21 / Spring Boot 4 "
@@ -30,7 +44,7 @@ prompt = (
     "file and line when possible.\n"
     "- **Suggestions**: optional improvements.\n\n"
     f"PR title: {pr_title}\n\n"
-    f"Diff:\n{diff}"
+    f"Diff{' (truncated)' if truncated else ''}:\n{diff}"
 )
 
 # Free models to try, in order (OpenRouter free tiers change often).
@@ -84,7 +98,9 @@ for model in MODELS:
         break
 
 if review is None:
-    review = f"AI review failed: {last_error}"
+    # Fail the job instead of posting a "failed" comment — keeps PRs clean.
+    print(f"::error::AI review failed: {last_error}", file=sys.stderr)
+    raise SystemExit(1)
 
 with open("ai_review.md", "w", encoding="utf-8") as f:
     f.write(f"### 🤖 AI Code Review\n\n{review}\n")

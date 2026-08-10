@@ -27,6 +27,7 @@ jobs:
         run: python3 .github/scripts/ai-review.py
 
       - name: Post review comment
+        if: success()
         run: gh pr comment "${{ github.event.pull_request.number }}" --body-file ai_review.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
