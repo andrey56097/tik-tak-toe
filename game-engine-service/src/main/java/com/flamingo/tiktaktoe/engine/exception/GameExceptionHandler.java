@@ -1,9 +1,7 @@
-package com.flamingo.tiktaktoe.engine.controller;
+package com.flamingo.tiktaktoe.engine.exception;
 
-import com.flamingo.tiktaktoe.engine.exception.BoardMappingException;
-import com.flamingo.tiktaktoe.engine.exception.GameConflictException;
-import com.flamingo.tiktaktoe.engine.exception.GameNotFoundException;
-import com.flamingo.tiktaktoe.engine.exception.InvalidMoveException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -14,6 +12,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  */
 @RestControllerAdvice
 public class GameExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GameExceptionHandler.class);
 
     @ExceptionHandler(GameNotFoundException.class)
     public ResponseEntity<String> handleNotFound(GameNotFoundException ex) {
@@ -32,6 +32,7 @@ public class GameExceptionHandler {
 
     @ExceptionHandler(BoardMappingException.class)
     public ResponseEntity<String> handleBoardMapping(BoardMappingException ex) {
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ex.getMessage());
+        log.error("Board mapping failed", ex);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Internal server error");
     }
 }

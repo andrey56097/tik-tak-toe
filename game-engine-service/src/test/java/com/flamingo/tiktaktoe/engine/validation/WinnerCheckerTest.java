@@ -98,4 +98,24 @@ class WinnerCheckerTest {
         );
         assertThat(checker.getWinner(board)).isNull();
     }
+
+    @Test
+    void isFullReturnsTrueWhenNoEmptyCellsRemain() {
+        List<List<CellState>> board = List.of(
+                List.of(CellState.X, CellState.O, CellState.X),
+                List.of(CellState.O, CellState.X, CellState.O),
+                List.of(CellState.O, CellState.X, CellState.O)
+        );
+        assertThat(checker.isFull(board)).isTrue();
+    }
+
+    @Test
+    void isFullReturnsFalseWhenEmptyCellsRemain() {
+        List<List<CellState>> board = List.of(
+                List.of(CellState.X, CellState.O, CellState.X),
+                List.of(CellState.O, CellState.X, CellState.O),
+                List.of(CellState.O, CellState.X, CellState.EMPTY)
+        );
+        assertThat(checker.isFull(board)).isFalse();
+    }
 }

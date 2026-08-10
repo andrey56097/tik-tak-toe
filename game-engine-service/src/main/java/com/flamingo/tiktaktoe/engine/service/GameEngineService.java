@@ -72,7 +72,7 @@ public class GameEngineService {
         if (winner != null) {
             entity.setStatus(GameStatus.WIN);
             entity.setWinner(winner);
-        } else if (isFull(board)) {
+        } else if (winnerChecker.isFull(board)) {
             entity.setStatus(GameStatus.DRAW);
         }
 
@@ -82,10 +82,6 @@ public class GameEngineService {
 
     private GameEntity findGame(String id) {
         return repository.findById(id).orElseThrow(() -> new GameNotFoundException(id));
-    }
-
-    private boolean isFull(List<List<CellState>> board) {
-        return board.stream().allMatch(row -> row.stream().noneMatch(CellState.EMPTY::equals));
     }
 
     private CellState opposite(CellState player) {

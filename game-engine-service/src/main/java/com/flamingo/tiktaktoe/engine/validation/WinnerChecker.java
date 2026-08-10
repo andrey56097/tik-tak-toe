@@ -34,6 +34,13 @@ public class WinnerChecker {
         return line(board, 0, 2, 1, -1);
     }
 
+    /**
+     * Returns {@code true} when the board has no empty cells left.
+     */
+    public boolean isFull(List<List<CellState>> board) {
+        return board.stream().allMatch(row -> row.stream().noneMatch(CellState.EMPTY::equals));
+    }
+
     private CellState line(List<List<CellState>> board, int startRow, int startCol, int dRow, int dCol) {
         CellState first = board.get(startRow).get(startCol);
         if (first == CellState.EMPTY) {
