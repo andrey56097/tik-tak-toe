@@ -354,8 +354,9 @@ flowchart LR
 ## Git Workflow
 
 - `main` is always stable and runnable.
-- Each **milestone** is developed on its own branch: `milestone/<number>-<short-name>` (e.g. `milestone/2-game-logic`), merged into `main` when complete.
-- **Small fixes** (bug fixes, refactoring, docs) go straight to `main`.
+- **All work happens on a separate branch** — never commit directly to `main`. Milestones use `milestone/<number>-<short-name>` (e.g. `milestone/2-game-logic`); other work uses `feature/<name>`, `fix/<name>`, `docs/<name>`.
+- **Code and its tests live on the same branch**, committed together (atomic commits).
+- **Code review is mandatory before merge** — a reviewer pass gates merging into `main`.
 - Commits are **atomic** — one logical step per commit, with a meaningful message.
 
 ---

@@ -13,8 +13,11 @@ Workspace folders for Claude Code in this project.
 ## Git workflow (project convention)
 
 - `main` is always stable and ready to run.
-- Each **milestone** from the plan gets its own branch: `milestone/<number>-<short-name>` (e.g. `milestone/2-game-logic`). Merge into `main` when complete.
-- **Small fixes** (bug fixes, refactoring, docs) go straight to `main`.
+- **All work happens on a separate branch** — never commit directly to `main`.
+  - Milestones: `milestone/<number>-<short-name>` (e.g. `milestone/2-game-logic`).
+  - Other work: `feature/<name>`, `fix/<name>`, `docs/<name>`, `chore/<name>`.
+- **Code and its tests live on the same branch**, committed together (atomic commits).
+- **Code review is mandatory before merge** — a reviewer subagent must pass before a branch is merged into `main`.
 - Commits are **atomic**: one logical step = one commit with a meaningful message.
 - The project plan lives in `docs/tic-tac-toe-plan.md`.
 

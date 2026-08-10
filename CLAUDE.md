@@ -53,7 +53,7 @@ This project treats persistence as swappable **by design**:
 - Every new function/method has a test covering behavior and edge cases.
 - Tests assert **real behavior**, never mock behavior.
 - Each unit must be tested: `@DataJpaTest` for repositories, unit tests for services/validation, integration tests for inter-service flows.
-- **Mutation testing (planned):** Pitest will be added as a Gradle plugin to measure test effectiveness (mutant score). Treat high coverage + mutation survival as a signal tests are too weak. *(Not yet configured — see roadmap.)*
+- **Mutation testing is MANDATORY** — every new production code is covered by mutation tests. Pitest is configured as a Gradle plugin; the mutant score gates acceptance. Tests that let mutants survive are considered too weak and must be strengthened. *(Pitest config — see roadmap / Testing Standards in the plan.)*
 
 ---
 
@@ -65,12 +65,14 @@ This project treats persistence as swappable **by design**:
   questions one at a time**, with a recommended answer for each, until we reach
   shared understanding. Only then may implementation begin. Never start coding
   while questions remain open.
-- **Implementation by one agent, verification by another.** When implementing a feature:
-  1. An **implementer subagent** writes the production code (and its own failing tests first, per TDD).
-  2. A **separate reviewer subagent** reviews the code and the tests — spec compliance + code quality. The reviewer never writes the code.
-  3. Run the `code-quality` skill checklist as part of acceptance.
+- **Separate agents for implementation and tests.** When implementing a feature:
+  1. A **test subagent** writes failing tests first (TDD red) — for production code, **mutation tests** included.
+  2. An **implementer subagent** writes the production code to make the tests pass (TDD green).
+  3. A **reviewer subagent** reviews both the code and the tests — spec compliance + code quality. The reviewer never writes the code.
+  4. Run the `code-quality` skill checklist as part of acceptance.
 - Use the `sdd` skill (project) — it wraps the canonical subagent-driven-development process.
-- Follow the **Git workflow** in [.claude/README.md](.claude/README.md): milestone branches, atomic commits.
+- **All work happens on a separate git branch** — never commit directly to `main`. Code and its tests live on the same branch, committed together (atomic commits). See the Git workflow in [.claude/README.md](.claude/README.md).
+- **Code review is mandatory before any commit/merge.** No commit is made without a reviewer subagent pass.
 - **Commit only after explicit user confirmation.** Never `git commit` on your own initiative — always ask the user first and wait for a clear «commit».
 - **Write descriptive commit messages.** Each commit message must explain *what* was done and (where useful) *why* — a summary line plus bullet points of the changes. Never a bare "update"/"fix". Commits are atomic: one logical step = one commit.
 - Build/test command: `./gradlew build` / `./gradlew test` (verify before marking anything complete).

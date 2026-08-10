@@ -18,6 +18,7 @@
 | Move strategy (v1) | Random move (simple implementation) |
 | Testing (unit) | JUnit 5 + Mockito |
 | Testing (integration) | Spring Boot Test, `@SpringBootTest`, `MockWebServer` / `WireMock`, Testcontainers (optional) |
+| Testing (mutation) | **Pitest** (Gradle plugin) — mutation testing is mandatory |
 | API documentation | springdoc-openapi **v3.x** — Swagger UI (`/swagger-ui.html`) + OpenAPI spec (`/v3/api-docs`), generated from code |
 | Containerization | Docker + docker-compose |
 | Build | Gradle 9.5.1 (Kotlin DSL, `build.gradle.kts`), independent projects (no shared root build file with common logic, except pulling in `common` as a dependency) |
@@ -402,6 +403,10 @@ This milestone closes the assignment's **"Testing & Validation"** section entire
 **Concurrency Handling (optional, but desirable)**
 - [ ] Test: two parallel `POST /api/games/{id}/move` on the same `gameId` — only one should be applied, the second should get a proper error (409), without corrupting the board state
 - [ ] At the code level: synchronization at write time (`@Transactional` + optimistic locking via `@Version` in `GameEntity`, or `synchronized`/`ReentrantLock` per `gameId` in the service layer)
+
+**Mutation testing**
+- [ ] Configure **Pitest** as a Gradle plugin; run `./gradlew pitest` per module
+- [ ] Every new production code is covered by mutation tests; the mutant score gates acceptance — tests that let mutants survive are too weak and must be strengthened
 
 **Result:** there is a test suite that can be run with a single command (`./gradlew test` in each module) and that proves the system actually works as a distributed one, not just "looks like" microservices.
 
