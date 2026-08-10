@@ -18,7 +18,7 @@ Workspace folders for Claude Code in this project.
   - Other code work: `feature/<name>`, `fix/<name>`, `chore/<name>`.
 - **Docs and rule changes go straight to `main`** (e.g. CLAUDE.md, README, plan, `.claude/README.md`).
 - **Code and its tests live on the same branch**, committed together (atomic commits).
-- **PR titles start with `[MILESTONE-<n>]`** — so the stage is clear at a glance (e.g. `[MILESTONE-1] Game Engine Service + H2`). The PR body describes the milestone's work. Commits stay atomic with descriptive messages (no tag).
+- **Commit and PR titles start with `[MILESTONE-<n>]`** — so the stage is clear at a glance (e.g. `[MILESTONE-1] Game Engine Service + H2`). The PR body describes the milestone's work. Commits stay atomic with descriptive messages.
 - **Code review is mandatory before merge** — a reviewer subagent must pass before a branch is merged into `main`.
 - Commits are **atomic**: one logical step = one commit with a meaningful message.
 - The project plan lives in `docs/tic-tac-toe-plan.md`.

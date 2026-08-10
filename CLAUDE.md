@@ -75,7 +75,7 @@ This project treats persistence as swappable **by design**:
 - **Code review is mandatory before any commit/merge.** No commit is made without a reviewer subagent pass.
 - **Commit only after explicit user confirmation.** Never `git commit` on your own initiative — always ask the user first and wait for a clear «commit».
 - **Write descriptive commit messages.** Each commit message must explain *what* was done and (where useful) *why* — a summary line plus bullet points of the changes. Never a bare "update"/"fix". Commits are atomic: one logical step = one commit.
-- **PR titles start with `[MILESTONE-<n>]`** (e.g. `[MILESTONE-1] ...`) — the stage is visible at a glance. Milestone branches are named `milestone-<number>` (no slash).
+- **Commit and PR titles start with `[MILESTONE-<n>]`** (e.g. `[MILESTONE-1] ...`) — the stage is visible at a glance. Milestone branches are named `milestone-<number>` (no slash).
 - Build/test command: `./gradlew build` / `./gradlew test` (verify before marking anything complete).
 
 ---
