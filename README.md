@@ -79,6 +79,7 @@ The assignment is treated as a production-grade distributed system: layered serv
 | 🗄️ **Persistent-by-design state** | H2 in-memory DB behind a real JPA repository — one line away from file-based persistence. |
 | 🐳 **Dockerized** | The whole stack starts with a single `docker-compose up` — isolated containers communicating over the compose network by service name. |
 | 🧪 **Tested end-to-end** | Unit, integration, and concurrency tests across all services. |
+| 🔄 **CI/CD** | GitHub Actions builds + tests every push/PR; deploy to a cluster via Kubernetes readiness when needed. |
 
 ---
 
@@ -95,6 +96,7 @@ The assignment is treated as a production-grade distributed system: layered serv
 | **Build** | Gradle 9.x (wrapper) + Kotlin DSL |
 | **Testing** | JUnit 5, Mockito, WireMock, Testcontainers *(optional)* |
 | **Ops** | Docker + docker-compose |
+| **CI/CD** | GitHub Actions (build + test + quality on push/PR) · Kubernetes readiness for deployment when needed |
 
 ---
 
@@ -323,6 +325,7 @@ All public routes are reachable through the gateway at `localhost:8080`.
 | 8 | CI (build + test + quality) | GitHub Actions on every push/PR: build, unit + mutation tests, quality checks |
 | 9 | Docker + docker-compose | Whole stack up with one command |
 | 10 | Final polish & submission | README, code style, end-to-end verification |
+| 11 | Kubernetes readiness (optional) | Manifests to deploy the stack to a cluster when needed |
 
 Full details — version decisions, design patterns, and the assignment-requirements matrix — live in **[docs/tic-tac-toe-plan.md](docs/tic-tac-toe-plan.md)**.
 
@@ -375,6 +378,7 @@ Future work, deliberately outside the current scope (tracked in the plan):
 - **Multiple concurrent game sessions**
 - **Resilience**: built-in `@Retryable` (Spring Boot 4) on Session → Engine calls, Circuit Breaker via `resilience4j-spring-boot4` if needed
 - **Observability**: MDC logging with `gameId`/`sessionId` correlation
+- **Kubernetes deployment** — readiness manifests (Milestone 11) to deploy the stack to a cluster when needed
 
 ---
 

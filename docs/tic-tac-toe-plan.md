@@ -21,7 +21,8 @@
 | Testing (mutation) | **Pitest** (Gradle plugin) — mutation testing is mandatory |
 | API documentation | springdoc-openapi **v3.x** — Swagger UI (`/swagger-ui.html`) + OpenAPI spec (`/v3/api-docs`), generated from code |
 | Containerization | Docker + docker-compose (one image per service) |
-| CI (Continuous Integration) | GitHub Actions — on every push/PR: build + unit tests + mutation tests (Pitest) + quality checks. No CD/deploy |
+| CI (Continuous Integration) | GitHub Actions — on every push/PR: build + unit tests + mutation tests (Pitest) + quality checks. Deploy when needed via Kubernetes (Milestone 11) |
+| Orchestration (optional) | Kubernetes — readiness manifests (Deployment/Service/ConfigMap/Secret) + Ingress, to deploy to a cluster when needed; complements docker-compose |
 | Build | Gradle 9.5.1 (Kotlin DSL, `build.gradle.kts`), independent projects (no shared root build file with common logic, except pulling in `common` as a dependency) |
 | Repository | Monorepo, 5 folders |
 | Shared DTOs between services | `common` module (shared JAR), pulled in as a Gradle dependency by Engine and Session |
@@ -445,6 +446,19 @@ This milestone closes the assignment's **"Testing & Validation"** section entire
 
 ---
 
+### Milestone 11 — Kubernetes readiness (optional)
+- [ ] `k8s/` directory with manifests for each of the 5 services: `Deployment.yaml` + `Service.yaml`
+- [ ] `k8s/configmap.yaml` — shared config (service names/URLs, ports)
+- [ ] `k8s/secret.yaml` — credentials (H2 / OpenRouter / gateway), referenced as secrets, never committed
+- [ ] `k8s/ingress.yaml` — external access to the Gateway (port 8080)
+- [ ] Eureka works in-cluster via Kubernetes Service DNS (services register by cluster service name)
+- [ ] readiness/liveness probes on each Deployment; resource requests/limits
+- [ ] Verify with `kubectl apply -f k8s/` (optional, local kind/minikube)
+
+**Result:** the stack can be deployed to a Kubernetes cluster when needed, with the same isolation + service-name communication as docker-compose.
+
+---
+
 ## Assignment requirements coverage
 
 | Assignment requirement | Where it's closed |
@@ -460,6 +474,7 @@ This milestone closes the assignment's **"Testing & Validation"** section entire
 | Data Persistence (optional) | Milestone 1 (H2, with a path to file mode) |
 | Real-Time Updates (optional) | Milestone 4 (WebSocket) |
 | CI (build + test + quality) | Milestone 8 |
+| Kubernetes readiness (optional) | Milestone 11 |
 | Code Quality | Milestone 10 |
 | Documentation (README) | Milestone 10 |
 | Testing (comprehensive integration tests) | Milestone 7 |
