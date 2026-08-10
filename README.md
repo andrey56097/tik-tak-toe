@@ -77,7 +77,7 @@ The assignment is treated as a production-grade distributed system: layered serv
 | ⚡ **Real-time updates** | Board state is pushed to the browser over WebSocket (STOMP + SockJS). |
 | 🗺️ **Service discovery & routing** | Netflix Eureka registers services; Spring Cloud Gateway is the single entry point (`:8080`). |
 | 🗄️ **Persistent-by-design state** | H2 in-memory DB behind a real JPA repository — one line away from file-based persistence. |
-| 🐳 **Dockerized** | The whole stack starts with a single `docker-compose up`. |
+| 🐳 **Dockerized** | The whole stack starts with a single `docker-compose up` — isolated containers communicating over the compose network by service name. |
 | 🧪 **Tested end-to-end** | Unit, integration, and concurrency tests across all services. |
 
 ---
@@ -189,7 +189,7 @@ POST /api/sessions  ──▶  session starts  ──▶  Game Session creates a
 | Requirement | Version |
 |------|------|
 | [JDK](https://adoptium.net/) | **21** or newer (toolchain pinned to 21) |
-| Docker + Compose | Latest *(needed from Milestone 8; not required for a local run)* |
+| Docker + Compose | Latest *(needed from Milestone 9; not required for a local run)* |
 | Gradle | **Not needed** — the repo ships a pinned [Gradle Wrapper](https://docs.gradle.org/current/userguide/gradle_wrapper.html) |
 
 Verify your environment:
@@ -320,8 +320,9 @@ All public routes are reachable through the gateway at `localhost:8080`.
 | 5 | UI Service | Browser page rendering the live board |
 | 6 | Gateway | Everything reachable through `localhost:8080` |
 | 7 | Testing & validation | Integration, error-handling, and concurrency suite |
-| 8 | Docker + docker-compose | Whole stack up with one command |
-| 9 | Final polish & submission | README, code style, end-to-end verification |
+| 8 | CI (build + test + quality) | GitHub Actions on every push/PR: build, unit + mutation tests, quality checks |
+| 9 | Docker + docker-compose | Whole stack up with one command |
+| 10 | Final polish & submission | README, code style, end-to-end verification |
 
 Full details — version decisions, design patterns, and the assignment-requirements matrix — live in **[docs/tic-tac-toe-plan.md](docs/tic-tac-toe-plan.md)**.
 

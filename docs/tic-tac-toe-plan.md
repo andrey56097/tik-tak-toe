@@ -20,7 +20,8 @@
 | Testing (integration) | Spring Boot Test, `@SpringBootTest`, `MockWebServer` / `WireMock`, Testcontainers (optional) |
 | Testing (mutation) | **Pitest** (Gradle plugin) — mutation testing is mandatory |
 | API documentation | springdoc-openapi **v3.x** — Swagger UI (`/swagger-ui.html`) + OpenAPI spec (`/v3/api-docs`), generated from code |
-| Containerization | Docker + docker-compose |
+| Containerization | Docker + docker-compose (one image per service) |
+| CI (Continuous Integration) | GitHub Actions — on every push/PR: build + unit tests + mutation tests (Pitest) + quality checks. No CD/deploy |
 | Build | Gradle 9.5.1 (Kotlin DSL, `build.gradle.kts`), independent projects (no shared root build file with common logic, except pulling in `common` as a dependency) |
 | Repository | Monorepo, 5 folders |
 | Shared DTOs between services | `common` module (shared JAR), pulled in as a Gradle dependency by Engine and Session |
@@ -412,16 +413,27 @@ This milestone closes the assignment's **"Testing & Validation"** section entire
 
 ---
 
-### Milestone 8 — Docker + docker-compose
-- [ ] `Dockerfile` for each of the 5 services
-- [ ] `docker-compose.yml` at the root with all services and correct startup order (`depends_on`)
-- [ ] Verify a full startup with a single command `docker-compose up`
+### Milestone 8 — CI (Continuous Integration)
+- [ ] GitHub Actions workflow: on every push/PR — `./gradlew build` (compiles + runs tests) for each service
+- [ ] Run unit tests + mutation tests (Pitest) in CI; a failed check marks the PR red
+- [ ] Quality checks: `./gradlew check` (or lint/spotless if configured)
+- [ ] Verify that a PR cannot be merged if CI is red (branch protection / required status check, if enabled)
 
-**Result:** the whole stack comes up with one command on a clean machine.
+**Result:** every push/PR is automatically built and tested; quality gates run before merge.
 
 ---
 
-### Milestone 9 — Final polish and Submission Guidelines
+### Milestone 9 — Docker + docker-compose
+- [ ] `Dockerfile` for each of the 5 services (one image per service)
+- [ ] `docker-compose.yml` at the root with all services, correct startup order (`depends_on`), and a shared network
+- [ ] Verify a full startup with a single command `docker-compose up` — containers are **isolated** (each in its own container) but **communicate over the shared compose network by service name** (e.g. `http://engine:8081`), not `localhost`
+- [ ] Verify shutdown with `docker-compose down`
+
+**Result:** the whole stack comes up with one command on a clean machine; no manual per-container startup — compose handles ordering, networking, and isolation.
+
+---
+
+### Milestone 10 — Final polish and Submission Guidelines
 - [ ] README.md: architecture, diagrams, run instructions (`docker-compose up`), test instructions (`./gradlew test`)
 - [ ] Code style check / comments in key places (validation, orchestration, error handling) — under "adheres to Spring Boot best practices"
 - [ ] A "Possible improvements / alternative approaches" section in the README (optional per the assignment, but easily covered with 5–6 items: minimax, message broker, persistent H2 instead of in-memory, multiple parallel game sessions, etc.)
@@ -447,10 +459,11 @@ This milestone closes the assignment's **"Testing & Validation"** section entire
 | Service Discovery / API Gateway (optional) | Milestones 2, 6 |
 | Data Persistence (optional) | Milestone 1 (H2, with a path to file mode) |
 | Real-Time Updates (optional) | Milestone 4 (WebSocket) |
-| Code Quality | Milestone 9 |
-| Documentation (README) | Milestone 9 |
+| CI (build + test + quality) | Milestone 8 |
+| Code Quality | Milestone 10 |
+| Documentation (README) | Milestone 10 |
 | Testing (comprehensive integration tests) | Milestone 7 |
-| Discussion of improvements | Milestone 9 |
+| Discussion of improvements | Milestone 10 |
 
 ## Possible future improvements (outside current scope)
 - Replace random moves with Minimax
