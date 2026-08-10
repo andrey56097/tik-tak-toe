@@ -45,6 +45,11 @@ This project treats persistence as swappable **by design**:
 - Custom domain exceptions (`InvalidMoveException`, `GameNotFoundException`) + `@RestControllerAdvice` → proper HTTP statuses (400/404/409), never bare 500s.
 - External call failures (Engine unavailable) must be handled with retry/logging/graceful degradation — never hang.
 
+### Logging
+
+- Use **SLF4J** (`org.slf4j.Logger`/`LoggerFactory`) — add logging where it's actually needed: unexpected/server-side failures (5xx), external call failures, retries, and other events an operator would need to diagnose without a debugger. Don't log routine client errors (400/404/409) that are already communicated via the HTTP response.
+- Never put exception internals (message, stack trace, cause) in a client-facing response body — log them server-side via SLF4J and return a generic message instead, especially for 5xx.
+
 ---
 
 ## Testing Standards (MANDATORY)
