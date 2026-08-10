@@ -32,30 +32,44 @@ prompt = (
     f"Diff:\n{diff}"
 )
 
-payload = {
-    "model": "google/gemma-3-27b-it:free",
-    "messages": [{"role": "user", "content": prompt}],
-    "max_tokens": 2000,
-}
+# Free models to try, in order (OpenRouter free tiers change often).
+MODELS = [
+    "google/gemma-4-31b-it:free",
+    "google/gemma-4-26b-a4b-it:free",
+    "openai/gpt-oss-20b:free",
+]
 
-req = urllib.request.Request(
-    "https://openrouter.ai/api/v1/chat/completions",
-    data=json.dumps(payload).encode("utf-8"),
-    headers={
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}",
-    },
-    method="POST",
-)
+review = None
+last_error = ""
+for model in MODELS:
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 2000,
+    }
+    req = urllib.request.Request(
+        "https://openrouter.ai/api/v1/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=90) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        review = data["choices"][0]["message"]["content"]
+        break
+    except urllib.error.HTTPError as e:
+        last_error = f"HTTP {e.code}: {e.read().decode('utf-8')[:300]}"
+        continue
+    except Exception as e:
+        last_error = str(e)
+        continue
 
-try:
-    with urllib.request.urlopen(req, timeout=90) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
-    review = data["choices"][0]["message"]["content"]
-except urllib.error.HTTPError as e:
-    review = f"AI review failed (HTTP {e.code}): {e.read().decode('utf-8')[:500]}"
-except Exception as e:
-    review = f"AI review failed: {e}"
+if review is None:
+    review = f"AI review failed: {last_error}"
 
 with open("ai_review.md", "w", encoding="utf-8") as f:
     f.write(f"### 🤖 AI Code Review\n\n{review}\n")
