@@ -1,0 +1,33 @@
+name: AI PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  ai-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch PR diff
+        run: gh pr diff "${{ github.event.pull_request.number }}" > pr.diff
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run AI review
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: python3 .github/scripts/ai-review.py
+
+      - name: Post review comment
+        if: success()
+        run: gh pr comment "${{ github.event.pull_request.number }}" --body-file ai_review.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
