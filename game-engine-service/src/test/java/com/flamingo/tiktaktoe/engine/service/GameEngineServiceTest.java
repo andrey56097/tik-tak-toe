@@ -91,6 +91,32 @@ class GameEngineServiceTest {
     }
 
     @Test
+    void makeMoveAllowsOTurnAfterX() {
+        when(repository.findById("g1")).thenReturn(Optional.of(newGame()));
+        when(repository.save(any(GameEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.makeMove("g1", new MoveRequest(CellState.X, 0, 0));
+        GameState state = service.makeMove("g1", new MoveRequest(CellState.O, 0, 1));
+
+        assertThat(state.board().get(0).get(1)).isEqualTo(CellState.O);
+        assertThat(state.nextTurn()).isEqualTo(CellState.X);
+        assertThat(state.status()).isEqualTo(GameStatus.IN_PROGRESS);
+    }
+
+    @Test
+    void makeMoveDetectsOWin() {
+        GameEntity game = newGame();
+        game.setBoard("[[\"O\",\"O\",\"EMPTY\"],[\"X\",\"X\",\"EMPTY\"],[\"EMPTY\",\"EMPTY\",\"EMPTY\"]]");
+        game.setNextTurn(CellState.O);
+        when(repository.findById("g1")).thenReturn(Optional.of(game));
+        when(repository.save(any(GameEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        GameState state = service.makeMove("g1", new MoveRequest(CellState.O, 0, 2));
+        assertThat(state.status()).isEqualTo(GameStatus.WIN);
+        assertThat(state.winner()).isEqualTo(CellState.O);
+    }
+
+    @Test
     void makeMoveDetectsWin() {
         GameEntity game = newGame();
         game.setBoard("[[\"X\",\"X\",\"EMPTY\"],[\"O\",\"O\",\"EMPTY\"],[\"EMPTY\",\"EMPTY\",\"EMPTY\"]]");
