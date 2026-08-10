@@ -3,6 +3,7 @@ package com.flamingo.tiktaktoe.engine.controller;
 import com.flamingo.tiktaktoe.common.GameState;
 import com.flamingo.tiktaktoe.common.MoveRequest;
 import com.flamingo.tiktaktoe.engine.service.GameEngineService;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,7 +26,7 @@ public class GameController {
     }
 
     @PostMapping("/{gameId}/move")
-    public GameState makeMove(@PathVariable String gameId, @RequestBody MoveRequest move) {
+    public GameState makeMove(@PathVariable String gameId, @Valid @RequestBody MoveRequest move) {
         return service.makeMove(gameId, move);
     }
 

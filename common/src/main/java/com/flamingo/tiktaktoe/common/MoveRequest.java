@@ -1,5 +1,7 @@
 package com.flamingo.tiktaktoe.common;
 
+import jakarta.validation.constraints.NotNull;
+
 /**
  * A move submitted to the Game Engine.
  *
@@ -7,5 +9,5 @@ package com.flamingo.tiktaktoe.common;
  * @param row    the board row (0..2)
  * @param col    the board column (0..2)
  */
-public record MoveRequest(CellState player, int row, int col) {
+public record MoveRequest(@NotNull CellState player, int row, int col) {
 }

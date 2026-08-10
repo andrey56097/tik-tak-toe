@@ -1,17 +1,11 @@
 package com.flamingo.tiktaktoe.engine.controller;
 
-import com.flamingo.tiktaktoe.engine.controller.*;
-import com.flamingo.tiktaktoe.engine.service.*;
-import com.flamingo.tiktaktoe.engine.domain.*;
-import com.flamingo.tiktaktoe.engine.repository.*;
-import com.flamingo.tiktaktoe.engine.validation.*;
-import com.flamingo.tiktaktoe.engine.exception.*;
-import com.flamingo.tiktaktoe.engine.mapper.*;
-
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flamingo.tiktaktoe.common.CellState;
 import com.flamingo.tiktaktoe.common.MoveRequest;
+import com.flamingo.tiktaktoe.engine.domain.GameEntity;
+import com.flamingo.tiktaktoe.engine.repository.GameRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -23,6 +17,7 @@ import java.util.List;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -102,5 +97,16 @@ class GameControllerIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new MoveRequest(CellState.O, 0, 0))))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    void makeMoveReturns400WhenPlayerIsMissing() throws Exception {
+        String id = createGame();
+        mockMvc.perform(post("/games/{id}/move", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"row\":0,\"col\":0}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.TEXT_PLAIN_VALUE + ";charset=UTF-8"))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("player")));
     }
 }
