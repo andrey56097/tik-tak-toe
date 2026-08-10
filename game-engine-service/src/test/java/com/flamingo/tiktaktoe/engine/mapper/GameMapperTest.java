@@ -5,11 +5,13 @@ import com.flamingo.tiktaktoe.common.CellState;
 import com.flamingo.tiktaktoe.common.GameState;
 import com.flamingo.tiktaktoe.common.GameStatus;
 import com.flamingo.tiktaktoe.engine.domain.GameEntity;
+import com.flamingo.tiktaktoe.engine.exception.BoardMappingException;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class GameMapperTest {
 
@@ -66,5 +68,25 @@ class GameMapperTest {
         );
         assertThat(board).hasSize(3);
         assertThat(board.get(0)).containsExactly(CellState.EMPTY, CellState.EMPTY, CellState.EMPTY);
+    }
+
+    @Test
+    void parseBoardReturnsExplicitlyMutableLists() {
+        List<List<CellState>> board = mapper.parseBoard(
+                "[[\"EMPTY\",\"EMPTY\",\"EMPTY\"],[\"EMPTY\",\"EMPTY\",\"EMPTY\"],[\"EMPTY\",\"EMPTY\",\"EMPTY\"]]"
+        );
+
+        board.get(0).set(0, CellState.X);
+        board.add(List.of(CellState.O, CellState.O, CellState.O));
+
+        assertThat(board.get(0).get(0)).isEqualTo(CellState.X);
+        assertThat(board).hasSize(4);
+    }
+
+    @Test
+    void parseBoardThrowsBoardMappingExceptionOnInvalidJson() {
+        assertThatThrownBy(() -> mapper.parseBoard("not valid json"))
+                .isInstanceOf(BoardMappingException.class)
+                .hasCauseInstanceOf(com.fasterxml.jackson.core.JsonProcessingException.class);
     }
 }

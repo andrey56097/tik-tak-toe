@@ -6,9 +6,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flamingo.tiktaktoe.common.CellState;
 import com.flamingo.tiktaktoe.common.GameState;
 import com.flamingo.tiktaktoe.engine.domain.GameEntity;
+import com.flamingo.tiktaktoe.engine.exception.BoardMappingException;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Converts between the JPA {@link GameEntity} and the API {@link GameState}.
@@ -43,9 +46,12 @@ public class GameMapper {
 
     public List<List<CellState>> parseBoard(String json) {
         try {
-            return objectMapper.readValue(json, BOARD_TYPE);
+            List<List<CellState>> rows = objectMapper.readValue(json, BOARD_TYPE);
+            return rows.stream()
+                    .map(ArrayList::new)
+                    .collect(Collectors.toCollection(ArrayList::new));
         } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Cannot parse board", e);
+            throw new BoardMappingException("Cannot parse board", e);
         }
     }
 
@@ -53,7 +59,7 @@ public class GameMapper {
         try {
             return objectMapper.writeValueAsString(board);
         } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Cannot serialize board", e);
+            throw new BoardMappingException("Cannot serialize board", e);
         }
     }
 }
