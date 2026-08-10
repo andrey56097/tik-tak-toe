@@ -51,13 +51,7 @@ public class GameEngineService {
     @Transactional
     public GameState makeMove(String gameId, MoveRequest move) {
         GameEntity entity = findGame(gameId);
-
-        if (entity.getStatus() != GameStatus.IN_PROGRESS) {
-            throw new GameConflictException("Game " + gameId + " is already finished");
-        }
-        if (move.player() != entity.getNextTurn()) {
-            throw new GameConflictException("Not " + move.player() + "'s turn");
-        }
+        assertPlayable(entity, move);
 
         List<List<CellState>> board = mapper.parseBoard(entity.getBoard());
         if (!validator.canPlay(board, move.player(), move.row(), move.col())) {
@@ -68,7 +62,7 @@ public class GameEngineService {
         mapper.writeBoard(entity, board);
 
         CellState winner = winnerChecker.getWinner(board);
-        entity.setNextTurn(opposite(move.player()));
+        entity.setNextTurn(move.player().opposite());
         if (winner != null) {
             entity.setStatus(GameStatus.WIN);
             entity.setWinner(winner);
@@ -84,7 +78,16 @@ public class GameEngineService {
         return repository.findById(id).orElseThrow(() -> new GameNotFoundException(id));
     }
 
-    private CellState opposite(CellState player) {
-        return player == CellState.X ? CellState.O : CellState.X;
+    /**
+     * Checks that a move can even be attempted right now: the game must still
+     * be in progress, and it must be this player's turn.
+     */
+    private void assertPlayable(GameEntity entity, MoveRequest move) {
+        if (entity.getStatus() != GameStatus.IN_PROGRESS) {
+            throw new GameConflictException("Game " + entity.getId() + " is already finished");
+        }
+        if (move.player() != entity.getNextTurn()) {
+            throw new GameConflictException("Not " + move.player() + "'s turn");
+        }
     }
 }
