@@ -8,6 +8,7 @@ import com.flamingo.tiktaktoe.engine.validation.*;
 import com.flamingo.tiktaktoe.engine.exception.*;
 import com.flamingo.tiktaktoe.engine.mapper.*;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flamingo.tiktaktoe.common.CellState;
 import com.flamingo.tiktaktoe.common.MoveRequest;
@@ -17,6 +18,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+
+import java.util.List;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -37,9 +40,18 @@ class GameControllerIntegrationTest {
 
     private String createGame() {
         GameEntity entity = new GameEntity(null,
-                "[[\"EMPTY\",\"EMPTY\",\"EMPTY\"],[\"EMPTY\",\"EMPTY\",\"EMPTY\"],[\"EMPTY\",\"EMPTY\",\"EMPTY\"]]",
+                emptyBoardJson(),
                 com.flamingo.tiktaktoe.common.GameStatus.IN_PROGRESS, CellState.X);
         return repository.save(entity).getId();
+    }
+
+    private String emptyBoardJson() {
+        List<CellState> emptyRow = List.of(CellState.EMPTY, CellState.EMPTY, CellState.EMPTY);
+        try {
+            return objectMapper.writeValueAsString(List.of(emptyRow, emptyRow, emptyRow));
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     @Test

@@ -24,9 +24,11 @@ public class GameEntity {
     private String board;
 
     @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private GameStatus status;
 
     @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private CellState nextTurn;
 
     @Enumerated(EnumType.STRING)
