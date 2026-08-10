@@ -7,7 +7,7 @@
 | Component | Technology |
 |------|------|
 | Language / Framework | Java 21 (LTS), Spring Boot 4.1.x |
-| Spring Cloud (Eureka, Gateway) | Spring Cloud 2025.1.0 "Oakwood" — the current release train, compatible with Spring Boot 4.x |
+| Spring Cloud (Eureka, Gateway) | Spring Cloud 2025.1.2 "Oakwood" — the current release train, compatible with Spring Boot 4.1.x |
 | Game Engine, Game Session | Spring Web (MVC, blocking) — per `task.md`, no reactivity requirement; kept simple (KISS) |
 | Gateway | Spring Cloud Gateway (WebFlux, reactive by design) |
 | Service Discovery | Netflix Eureka |
@@ -40,7 +40,9 @@ testImplementation("com.h2database:h2") // no version — managed by the Spring 
 
 **Gradle 9.5.1** — pinned via the Gradle Wrapper (`gradle/wrapper/gradle-wrapper.properties`) in the repo itself, so a reviewer won't see drift from a locally installed Gradle. Keep the tech-stack table and the wrapper in sync when bumping.
 
-**Spring Cloud Gateway — an important artifact nuance.** In Spring Cloud 2025.1.0 "Oakwood" the starter artifact itself was renamed: instead of the legacy `spring-cloud-starter-gateway`, it's now `spring-cloud-starter-gateway-server-webflux` (the reactive version — the one we need). If a tutorial or Spring Initializr still offers the old name, that's a sign of an outdated Spring Cloud version — the BOM needs checking.
+**Spring Cloud version compatibility — use 2025.1.2, not 2025.1.0.** Spring Cloud 2025.1.0/2025.1.1 are compatible only with Spring Boot 4.0.x; the Spring Boot 4.1.0 compatibility was added in **Spring Cloud 2025.1.2** (released June 12, 2026, right after Boot 4.1.0). Using 2025.1.0 with Boot 4.1.0 fails at startup with "Spring Boot [4.1.0] is not compatible with this Spring Cloud release train". Pin the Cloud BOM to `2025.1.2` in gateway and eureka-server.
+
+**Spring Cloud Gateway — an important artifact nuance.** In Spring Cloud 2025.1.x "Oakwood" the starter artifact itself was renamed: instead of the legacy `spring-cloud-starter-gateway`, it's now `spring-cloud-starter-gateway-server-webflux` (the reactive version — the one we need). If a tutorial or Spring Initializr still offers the old name, that's a sign of an outdated Spring Cloud version — the BOM needs checking.
 
 **Resilience: Resilience4j → reconsidered in favor of Spring Boot 4 built-in resilience.** We originally planned Resilience4j as an optional improvement (a Circuit Breaker on Session → Engine calls). Research showed Spring Boot 4 (built on Spring Framework 7) now ships with **built-in** `@Retryable` and `@ConcurrencyLimit` annotations — i.e. retry and overload protection without any third-party library at all. This directly fits our KISS principle — we don't pull in a dependency where the framework already solves the problem. Resilience4j is still relevant and compatible (the package is `resilience4j-spring-boot4`, not the old `-spring-boot2`/`-spring-boot3`), but it's only needed if a full Circuit Breaker with metrics is required — for retry on Session → Engine calls, built-in `@Retryable` suffices.
 
@@ -57,7 +59,7 @@ The assignment allows an in-memory database (*"Although an in-memory database is
 ### Why Spring Boot 4.1.x instead of 3.x
 
 At project start (August 2026), Spring Boot 3.5 reached end of support (EOL June 30, 2026), while Spring Boot 4.1.0 is the current supported release (supported at least until July 2027). The assignment doesn't constrain the framework version, so we take the current one:
-- Spring Cloud 2025.1.0 "Oakwood" — the release train officially compatible with Spring Boot 4.x, includes current Eureka and Gateway without changes to our architecture
+- Spring Cloud 2025.1.2 "Oakwood" — the release train compatible with Spring Boot 4.1.x (2025.1.0/2025.1.1 support only Boot 4.0.x), includes current Eureka and Gateway without changes to our architecture
 - Spring Boot 4.x requires a minimum of Java 17, with support up to Java 26 — our choice of Java 21 fits entirely
 
 ---
