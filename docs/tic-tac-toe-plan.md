@@ -206,7 +206,7 @@ sequenceDiagram
 
     B->>GW: POST /api/sessions
     GW->>S: proxy request
-    S->>E: POST /api/games (create game)
+    S->>E: POST /sessions (Session initializes game in Engine)
     E->>DB: INSERT new game
     E-->>S: GameState (empty board)
     S-->>GW: sessionId
@@ -214,7 +214,7 @@ sequenceDiagram
 
     loop while status == IN_PROGRESS
         S->>S: decideMove() — random move
-        S->>E: POST /api/games/{id}/move
+        S->>E: POST /games/{id}/move
         E->>E: validate move
         alt move invalid
             E-->>S: 409 Conflict / error
@@ -249,13 +249,14 @@ So: **moves are made on the backend** — the Game Session decides the move, the
  │                          │                                  │
  │  POST /api/sessions      │  creates session, returns id     │
  │─────────────────────────>│                                  │
- │                          │  POST /api/games  (create game)  │
+ │                          │  creates game in Engine (via     │
+ │                          │  POST /sessions, M3)             │
  │                          │─────────────────────────────────>│
  │                          │  ── auto-play loop ──            │
  │  POST /api/sessions/{id} │                                  │
  │  /simulate               │  decideMove() (random)           │
  │─────────────────────────>│─────────────────────────────────>│
- │                          │  POST /api/games/{id}/move       │
+ │                          │  POST /games/{id}/move           │
  │                          │─────────────────────────────────>│
  │                          │        GameState (validated)     │
  │  WebSocket push          │<─────────────────────────────────│
@@ -265,7 +266,7 @@ So: **moves are made on the backend** — the Game Session decides the move, the
 
 1. The user clicks **Start Simulation** in the UI → `POST /api/sessions` → Session creates a session and returns `sessionId`.
 2. The UI calls `POST /api/sessions/{id}/simulate` (or Session starts the loop itself).
-3. **Session** (`GameSessionOrchestrator`) runs the loop: `decideMove()` (picks a cell) → sends `POST /api/games/{id}/move` → **Engine** validates and applies the move, returns the new `GameState`.
+3. **Session** (`GameSessionOrchestrator`) runs the loop: `decideMove()` (picks a cell) → sends `POST /games/{id}/move` → **Engine** validates and applies the move, returns the new `GameState`.
 4. After every move Session **pushes the update over WebSocket** → UI redraws the board.
 5. Repeat until `IN_PROGRESS` → `WIN` / `DRAW`.
 
@@ -311,9 +312,9 @@ graph LR
 - [ ] `application.yml`: `jdbc:h2:mem:games;DB_CLOSE_DELAY=-1`, enable H2 Console
 - [ ] Entity `GameEntity` (id, board as JSON/String, status, nextTurn) + `GameRepository extends JpaRepository<GameEntity, String>`
 - [ ] DTO models: `CellState`, `GameStatus` (`IN_PROGRESS`/`WIN`/`DRAW`), `GameState` (includes `winner`: X/O/null), `MoveRequest` (includes `player`: X/O + `row`/`col`)
-- [ ] `POST /api/games` — create a new game, save to H2
-- [ ] `POST /api/games/{id}/move` — apply a move + validation (submitted `player` == whose turn, cell free, game not finished, bounds 0..2), update in H2; returns status `IN_PROGRESS` / `WIN` / `DRAW` + `winner` when finished
-- [ ] `GET /api/games/{id}` — fetch current state from H2
+- [ ] `POST /games/{gameId}/move` — apply a move + validation (submitted `player` == whose turn, cell free, game not finished, bounds 0..2), update in H2; returns status `IN_PROGRESS` / `WIN` / `DRAW` + `winner` when finished
+- [ ] `GET /games/{gameId}` — fetch current state from H2
+- [ ] Game creation happens via `GameRepository`/H2 (Session initializes games in M3 per `task.md` — no `POST /games` endpoint in Engine)
 - [ ] Winner-detection logic (check 8 lines) and draw detection
 - [ ] **Error handling**: custom exceptions (`InvalidMoveException`, `GameNotFoundException`) + `@RestControllerAdvice` → proper HTTP statuses (400/404/409) instead of bare 500s
 - [ ] Unit tests (JUnit 5): move validation, winner/draw detection, handling invalid moves
@@ -375,7 +376,7 @@ graph LR
 ### Milestone 6 — Gateway
 - [ ] Stand up Spring Cloud Gateway (port 8080)
 - [ ] Route to `GAME-SESSION-SERVICE` (`/api/sessions/**`)
-- [ ] Route to `GAME-ENGINE-SERVICE` (`/api/games/**`) — optional, for direct access/debugging
+- [ ] Route to `GAME-ENGINE-SERVICE` (`/games/**`) — optional, for direct access/debugging
 - [ ] Route to `UI-SERVICE` (`/**`, lowest priority)
 - [ ] Verify that the whole flow works through the single port `localhost:8080`
 
@@ -393,7 +394,7 @@ This milestone closes the assignment's **"Testing & Validation"** section entire
 
 **State Management**
 - [ ] Test: after a series of moves, the state in H2 (Engine) matches what Session sees and what is pushed to the UI via WebSocket
-- [ ] Test for state recovery on a repeated `GET /api/games/{id}` — data isn't "lost" between requests
+- [ ] Test for state recovery on a repeated `GET /games/{id}` — data isn't "lost" between requests
 
 **Error Handling**
 - [ ] Test: an invalid move (occupied cell, wrong turn) → correct HTTP status and a clear message, the game isn't broken
@@ -405,7 +406,7 @@ This milestone closes the assignment's **"Testing & Validation"** section entire
 - [ ] Verify that WebSocket messages actually arrive on every move (via a test STOMP client in the test)
 
 **Concurrency Handling (optional, but desirable)**
-- [ ] Test: two parallel `POST /api/games/{id}/move` on the same `gameId` — only one should be applied, the second should get a proper error (409), without corrupting the board state
+- [ ] Test: two parallel `POST /games/{id}/move` on the same `gameId` — only one should be applied, the second should get a proper error (409), without corrupting the board state
 - [ ] At the code level: synchronization at write time (`@Transactional` + optimistic locking via `@Version` in `GameEntity`, or `synchronized`/`ReentrantLock` per `gameId` in the service layer)
 
 **Mutation testing**

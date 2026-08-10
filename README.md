@@ -171,7 +171,7 @@ The full flow:
 POST /api/sessions  ──▶  session starts  ──▶  Game Session creates a game in the Engine
        │                                          │
        ▼                                          ▼
-   browser watches              loop:  decideMove() → POST /api/games/{id}/move
+   browser watches              loop:  decideMove() → POST /games/{id}/move
        ▲                              │
        │                              ▼
   WebSocket push ◀──────  new GameState after every move
@@ -295,9 +295,8 @@ tik-tak-toe/
 
 | Method | Path | Service | Description | Milestone |
 |------|------|------|------|------|
-| `POST` | `/api/games` | Engine | Create a new game (empty board) | 1 |
-| `POST` | `/api/games/{id}/move` | Engine | Submit & validate a move | 1 |
-| `GET` | `/api/games/{id}` | Engine | Fetch current game state | 1 |
+| `POST` | `/games/{gameId}/move` | Engine | Submit & validate a move | 1 |
+| `GET` | `/games/{gameId}` | Engine | Fetch current game state | 1 |
 | `POST` | `/api/sessions` | Session | Create a new session (returns immediately) | 3 |
 | `POST` | `/api/sessions/{sessionId}/simulate` | Session | Trigger automated move simulation | 3 |
 | `GET` | `/api/sessions/{sessionId}` | Session | Session details, move history, current state | 3 |
