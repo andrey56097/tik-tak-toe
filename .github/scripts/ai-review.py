@@ -6,6 +6,7 @@ Markdown review to ai_review.md for the workflow to post as a PR comment.
 """
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 
@@ -39,34 +40,48 @@ MODELS = [
     "openai/gpt-oss-20b:free",
 ]
 
+# Max attempts per model before moving to the next one.
+MAX_ATTEMPTS = 3
+# Backoff (seconds) between attempts on rate-limit (HTTP 429).
+BACKOFF = 10
+
 review = None
 last_error = ""
 for model in MODELS:
-    payload = {
-        "model": model,
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 2000,
-    }
-    req = urllib.request.Request(
-        "https://openrouter.ai/api/v1/chat/completions",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=90) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        review = data["choices"][0]["message"]["content"]
+    for attempt in range(MAX_ATTEMPTS):
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 2000,
+        }
+        req = urllib.request.Request(
+            "https://openrouter.ai/api/v1/chat/completions",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=90) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            review = data["choices"][0]["message"]["content"]
+            break
+        except urllib.error.HTTPError as e:
+            last_error = f"HTTP {e.code}: {e.read().decode('utf-8')[:300]}"
+            if e.code == 429 and attempt < MAX_ATTEMPTS - 1:
+                time.sleep(BACKOFF)
+                continue
+            break
+        except Exception as e:
+            last_error = str(e)
+            if attempt < MAX_ATTEMPTS - 1:
+                time.sleep(BACKOFF)
+                continue
+            break
+    if review is not None:
         break
-    except urllib.error.HTTPError as e:
-        last_error = f"HTTP {e.code}: {e.read().decode('utf-8')[:300]}"
-        continue
-    except Exception as e:
-        last_error = str(e)
-        continue
 
 if review is None:
     review = f"AI review failed: {last_error}"
