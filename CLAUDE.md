@@ -124,6 +124,7 @@ Concrete class names from the plan — use these when implementing or reviewing:
 ## Project Facts
 
 - Java 21 (LTS), Spring Boot 4.1.x, Spring Cloud 2025.1.2 "Oakwood". Gradle wrapper (pinned), Kotlin DSL.
+- **Package structure: organize code by layer into subpackages** under the module root (e.g. `com.flamingo.tiktaktoe.engine.<layer>`): `controller`, `service`, `domain`, `repository`, `mapper`, `validation`, `exception`. Do not dump all classes into one flat package once a module grows beyond a few files. **Tests mirror the same subpackages** (e.g. `MoveValidatorTest` lives in `validation/`).
 - Package root: `com.flamingo.tiktaktoe`.
 - **Requirements source of truth:** `docs/task.md` — the assignment (home task). The plan (`docs/tic-tac-toe-plan.md`) is built on it and tracks it item-by-item; read **both** before large work. If plan and task ever disagree, `task.md` wins.
 - **Current scope: skeleton app (Milestone 0).** Roadmap: 1 Engine+H2 → 2 Eureka → 3 Session → 4 WebSocket → 5 UI → 6 Gateway → 7 Testing → 8 Docker → 9 Polish. Full detail in the plan.
