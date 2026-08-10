@@ -71,6 +71,7 @@ This project treats persistence as swappable **by design**:
   3. Run the `code-quality` skill checklist as part of acceptance.
 - Use the `sdd` skill (project) — it wraps the canonical subagent-driven-development process.
 - Follow the **Git workflow** in [.claude/README.md](.claude/README.md): milestone branches, atomic commits.
+- **Write descriptive commit messages.** Each commit message must explain *what* was done and (where useful) *why* — a summary line plus bullet points of the changes. Never a bare "update"/"fix". Commits are atomic: one logical step = one commit.
 - Build/test command: `./gradlew build` / `./gradlew test` (verify before marking anything complete).
 
 ---
