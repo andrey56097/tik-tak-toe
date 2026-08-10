@@ -13,9 +13,10 @@ Workspace folders for Claude Code in this project.
 ## Git workflow (project convention)
 
 - `main` is always stable and ready to run.
-- **All work happens on a separate branch** — never commit directly to `main`.
+- **Code and test work happens on a separate branch** — never commit code or tests directly to `main`.
   - Milestones: `milestone/<number>-<short-name>` (e.g. `milestone/2-game-logic`).
-  - Other work: `feature/<name>`, `fix/<name>`, `docs/<name>`, `chore/<name>`.
+  - Other code work: `feature/<name>`, `fix/<name>`, `chore/<name>`.
+- **Docs and rule changes go straight to `main`** (e.g. CLAUDE.md, README, plan, `.claude/README.md`).
 - **Code and its tests live on the same branch**, committed together (atomic commits).
 - **Code review is mandatory before merge** — a reviewer subagent must pass before a branch is merged into `main`.
 - Commits are **atomic**: one logical step = one commit with a meaningful message.

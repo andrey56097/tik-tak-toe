@@ -71,7 +71,7 @@ This project treats persistence as swappable **by design**:
   3. A **reviewer subagent** reviews both the code and the tests — spec compliance + code quality. The reviewer never writes the code.
   4. Run the `code-quality` skill checklist as part of acceptance.
 - Use the `sdd` skill (project) — it wraps the canonical subagent-driven-development process.
-- **All work happens on a separate git branch** — never commit directly to `main`. Code and its tests live on the same branch, committed together (atomic commits). See the Git workflow in [.claude/README.md](.claude/README.md).
+- **Code and test work happens on a separate git branch** — never commit code or tests directly to `main`. Code and its tests live on the same branch, committed together (atomic commits). **Docs and rule changes go straight to `main`** (e.g. CLAUDE.md, README, plan, `.claude/README.md`). See the Git workflow in [.claude/README.md](.claude/README.md).
 - **Code review is mandatory before any commit/merge.** No commit is made without a reviewer subagent pass.
 - **Commit only after explicit user confirmation.** Never `git commit` on your own initiative — always ask the user first and wait for a clear «commit».
 - **Write descriptive commit messages.** Each commit message must explain *what* was done and (where useful) *why* — a summary line plus bullet points of the changes. Never a bare "update"/"fix". Commits are atomic: one logical step = one commit.
