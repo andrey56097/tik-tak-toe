@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: game-engine-service
+  datasource:
+    url: jdbc:h2:mem:games;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+  h2:
+    console:
+      enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: update
+
+server:
+  port: 8081
