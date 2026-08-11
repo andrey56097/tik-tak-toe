@@ -12,10 +12,39 @@ for this repository, with this project's hard requirements bolted on:
 
 > **Announce:** "I'm using the sdd skill to execute this with separated implementer/reviewer subagents."
 
-## When to use
+## When to use — full process
 
-- Implementing tasks from `docs/tic-tac-toe-plan.md` (or any feature/bugfix).
-- Whenever you'd otherwise write code directly in the session for a non-trivial change.
+Use the full three-subagent process (below) when a change is any of:
+
+- New functionality, or a change with a real design/architecture decision behind it
+  (new class, new endpoint, new cross-service contract, a grilled design decision).
+- Touches multiple layers (controller + service + persistence, or crosses a
+  service/module boundary).
+- Anything the user hasn't already fully specified — if you'd need to make a judgment
+  call about *what* to build, not just *how*, that's full-process territory.
+
+## Light path — for low-stakes, already-specified changes
+
+Skip the subagent dispatches and edit directly in this session when **all** of these
+hold:
+
+- The user has stated the exact change wanted (rename, move a method, add an
+  annotation, tweak a config value, apply a specific fix already agreed on) — no
+  design decision left for you to make.
+- It introduces no new architecture/pattern and stays within one class or a small,
+  mechanical, easily-reviewable diff.
+- It's on code that's already tested and reviewed — you're not adding new untested
+  behavior, just reshaping or correcting existing behavior.
+
+Light path still means: make the edit, run the existing test suite yourself and
+confirm it's still green (don't skip verification just because you skipped
+subagents), show the diff, and — per the Rules below — **never commit without the
+user's explicit confirmation**, exactly like the full process. The only thing being
+skipped is the subagent dispatch overhead, not the verification or the commit gate.
+
+If partway through a "light" change you find yourself making a design call the user
+didn't already make, stop and either ask or escalate to the full process — don't let
+a light-path change quietly grow into an unreviewed architectural one.
 
 ## Before you start — clarify first
 
