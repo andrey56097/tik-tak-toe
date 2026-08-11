@@ -62,7 +62,7 @@ This repository implements a **distributed Tic Tac Toe**: the game is not a sing
 
 The assignment is treated as a production-grade distributed system: layered services, design patterns (Strategy, Repository, Adapter, DTO), proper error handling, and a comprehensive test suite — unit, integration, and concurrency.
 
-> **Status:** 🔨 in development. The current codebase is a Spring Boot skeleton from Spring Initializr. The full architecture is designed and sequenced in milestones — see [docs/tic-tac-toe-plan.md](docs/tic-tac-toe-plan.md).
+> **Status:** 🔨 in development. Built and tested so far: the **Game Engine** (rules, H2, upsert move endpoint), the **Game Session** orchestrator (auto-play, retries, timeouts), **Eureka** registration, and the shared `common` contract. Not built yet: WebSocket push, UI, gateway, Docker. The feature table below describes the target system; the [Roadmap](#roadmap) marks what each milestone closes and which are optional per `task.md`.
 >
 > **Requirements source:** the assignment is authoritative in [docs/task.md](docs/task.md) (the home assignment). The implementation plan is built on it and tracks it item-by-item.
 
@@ -74,12 +74,12 @@ The assignment is treated as a production-grade distributed system: layered serv
 |------|------|
 | 🤖 **Self-playing game** | The session orchestrator picks a move (random strategy for v1), submits it, and repeats until the game ends. |
 | 🏗️ **Microservice architecture** | Game engine, session orchestrator, UI, service discovery, and gateway as independent deployable units. |
-| ⚡ **Real-time updates** | Board state is pushed to the browser over WebSocket (STOMP + SockJS). |
-| 🗺️ **Service discovery & routing** | Netflix Eureka registers services; Spring Cloud Gateway is the single entry point (`:8080`). |
+| ⚡ **Real-time updates** *(planned)* | Board state is pushed to the browser over WebSocket (STOMP + SockJS). |
+| 🗺️ **Service discovery & routing** | Netflix Eureka registers services today; Spring Cloud Gateway becomes the single entry point (`:8080`) in Milestone 6. |
 | 🗄️ **Persistent-by-design state** | H2 in-memory DB behind a real JPA repository — one line away from file-based persistence. |
-| 🐳 **Dockerized** | The whole stack starts with a single `docker-compose up` — isolated containers communicating over the compose network by service name. |
+| 🐳 **Dockerized** *(planned)* | The whole stack starts with a single `docker-compose up` — isolated containers communicating over the compose network by service name. |
 | 🧪 **Tested end-to-end** | Unit, integration, and concurrency tests across all services. |
-| 🔄 **CI/CD** | GitHub Actions builds + tests every push/PR; deploy to a cluster via Kubernetes readiness when needed. |
+| 🔄 **CI/CD** *(partial)* | GitHub Actions reviews every PR today; a build + test + quality workflow lands in Milestone 8. |
 
 ---
 
@@ -92,7 +92,7 @@ The assignment is treated as a production-grade distributed system: layered serv
 | **Cloud** | [Spring Cloud 2025.1.2 "Oakwood"](https://spring.io/projects/spring-cloud) — Eureka, Gateway |
 | **Data** | Spring Data JPA + [H2](https://www.h2database.com/) (in-memory) |
 | **Realtime** | WebSocket / STOMP / SockJS |
-| **HTTP Client** | Spring `WebClient` (reactive, `@LoadBalanced`) |
+| **HTTP Client** | Spring `RestClient` (synchronous, `@LoadBalanced`, connect + read timeouts) |
 | **Build** | Gradle 9.x (wrapper) + Kotlin DSL |
 | **Testing** | JUnit 5, Mockito, WireMock, Testcontainers *(optional)* |
 | **Ops** | Docker + docker-compose |
@@ -124,7 +124,7 @@ flowchart TB
     Gateway -->|lb://GAME-SESSION-SERVICE| Session
     Gateway -->|lb://GAME-ENGINE-SERVICE| Engine
 
-    Session -->|REST · WebClient| Engine
+    Session -->|REST · RestClient| Engine
     Session -.->|WebSocket · STOMP| UI
 
     UI -.->|register| Eureka
@@ -137,7 +137,7 @@ flowchart TB
 
 1. The **browser** talks only to the **gateway** (`:8080`) — it never knows internal service ports.
 2. The gateway routes requests **by service name** (`lb://GAME-SESSION-SERVICE`, …) using addresses it discovers from **Eureka**.
-3. The **Game Session Service** orchestrates a whole game: it asks the *Engine* to create a game, calls its own move strategy, submits each move over **REST**, and after every move pushes the fresh board to the UI over **WebSocket**.
+3. The **Game Session Service** orchestrates a whole game: it calls its own move strategy and submits each move over **REST** (the move endpoint creates the game on first use), and after every move pushes the fresh board to the UI over **WebSocket**.
 4. The **Game Engine Service** owns the rules: move validation, winner detection, and persistence to **H2**.
 
 > A full game-cycle sequence diagram is in the [implementation plan](docs/tic-tac-toe-plan.md#one-game-cycle-sequence).
@@ -159,7 +159,7 @@ Who does what (per `docs/task.md`):
 
 | Component | Role in moves |
 |------|------|
-| **UI** | Displays the board in real time, triggers simulation (`Start Simulation` → `POST /api/sessions/{id}/simulate`), shows status and move history. **Never generates moves.** |
+| **UI** | Displays the board in real time, triggers simulation (`Start Simulation` → `POST /sessions/{id}/simulate`), shows status and move history. **Never generates moves.** |
 | **Game Session** | **Generates moves** (`decideMove()`, random strategy in v1) and orchestrates the auto-play loop. |
 | **Game Engine** | **Validates and applies** moves, detects winner/draw, owns persistence. |
 
@@ -168,7 +168,7 @@ So: **moves are made on the backend** — the Game Session decides the move, the
 The full flow:
 
 ```
-POST /api/sessions  ──▶  session starts  ──▶  Game Session creates a game in the Engine
+POST /sessions  ──▶  session starts  ──▶  Game Session creates a game in the Engine
        │                                          │
        ▼                                          ▼
    browser watches              loop:  decideMove() → POST /games/{id}/move
@@ -184,7 +184,7 @@ POST /api/sessions  ──▶  session starts  ──▶  Game Session creates a
 
 ## Getting Started
 
-> **Note:** the commands below run the **current skeleton** (a single Spring Boot application). Once the milestone plan lands, the whole stack will start with `docker-compose up` — see [Roadmap](#roadmap).
+> **Note:** each service is started on its own port for now — Eureka `8761`, Engine `8081`, Session `8082`. Once Milestone 9 lands, the whole stack starts with `docker-compose up` — see [Roadmap](#roadmap).
 
 ### Prerequisites
 
@@ -291,19 +291,26 @@ tik-tak-toe/
 
 ## API Surface
 
-> Per the implementation plan. The skeleton today exposes no endpoints yet; each route is closed by its milestone.
+> Engine and Session are live; the **Status** column marks what is not built yet. No `/api` prefix anywhere — `task.md` names the paths directly and Milestone 1 settled on matching it.
 
-| Method | Path | Service | Description | Milestone |
-|------|------|------|------|------|
-| `POST` | `/games/{gameId}/move` | Engine | Submit & validate a move | 1 |
-| `GET` | `/games/{gameId}` | Engine | Fetch current game state | 1 |
-| `POST` | `/api/sessions` | Session | Create a new session (returns immediately) | 3 |
-| `POST` | `/api/sessions/{sessionId}/simulate` | Session | Trigger automated move simulation | 3 |
-| `GET` | `/api/sessions/{sessionId}` | Session | Session details, move history, current state | 3 |
-| `WS` | `/ws-game` → `/topic/game/{id}` | Session | Subscribe to real-time updates | 4 |
-| `GET` | `/` | UI | Play in the browser | 5 |
+| Method | Path | Service | Description | Milestone | Status |
+|---|---|---|---|---|---|
+| `POST` | `/games/{gameId}/move` | Engine | Submit a move; creates the game if the id is unknown | 1 | live |
+| `GET` | `/games/{gameId}` | Engine | Fetch current game state | 1 | live |
+| `POST` | `/sessions` | Session | Create a new session (returns immediately) | 3 | live |
+| `POST` | `/sessions/{sessionId}/simulate` | Session | Trigger automated move simulation | 3 | live |
+| `GET` | `/sessions/{sessionId}` | Session | Session details, move history, current state | 3 | live |
+| `GET` | `/actuator/health` | Engine, Session | Liveness for Eureka and operators | 1, 3 | live |
+| `WS` | `/ws-game`, topic `/topic/game/{sessionId}` | Session | Open a STOMP connection and subscribe to live updates | 4 | planned |
+| `GET` | `/` | UI | Play in the browser | 5 | planned |
 
-All public routes are reachable through the gateway at `localhost:8080`.
+`/ws-game` is not a REST route: it is the WebSocket handshake URL. A client
+connects there once, then subscribes to `/topic/game/{sessionId}` over that
+single connection.
+
+Once the gateway lands (Milestone 6), all public routes will be reachable
+through `localhost:8080`. Until then each service is called on its own port —
+Engine `8081`, Session `8082`.
 
 **API docs:** each REST service (Engine, Session) exposes its OpenAPI spec and Swagger UI via **springdoc-openapi** — see `/v3/api-docs` and `/swagger-ui.html` on the service's port.
 
