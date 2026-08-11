@@ -15,26 +15,30 @@ import java.util.concurrent.ThreadLocalRandom;
 @Component
 public class RandomMoveStrategy implements MoveStrategy {
 
+    /** A board coordinate — named components beat {@code int[]}'s positional indices. */
+    private record Cell(int row, int col) {
+    }
+
     @Override
     public MoveRequest decideMove(String gameId, GameState currentState) {
-        List<int[]> emptyCells = findEmptyCells(currentState);
+        List<Cell> emptyCells = findEmptyCells(currentState);
         if (emptyCells.isEmpty()) {
             throw new IllegalStateException(
                     "No empty cells available to move into for game " + gameId);
         }
 
-        int[] chosen = emptyCells.get(ThreadLocalRandom.current().nextInt(emptyCells.size()));
-        return new MoveRequest(currentState.nextTurn(), chosen[0], chosen[1]);
+        Cell chosen = emptyCells.get(ThreadLocalRandom.current().nextInt(emptyCells.size()));
+        return new MoveRequest(currentState.nextTurn(), chosen.row(), chosen.col());
     }
 
-    private static List<int[]> findEmptyCells(GameState currentState) {
+    private static List<Cell> findEmptyCells(GameState currentState) {
         List<List<CellState>> board = currentState.board();
-        List<int[]> emptyCells = new ArrayList<>();
+        List<Cell> emptyCells = new ArrayList<>();
         for (int row = 0; row < board.size(); row++) {
             List<CellState> rowCells = board.get(row);
             for (int col = 0; col < rowCells.size(); col++) {
                 if (rowCells.get(col) == CellState.EMPTY) {
-                    emptyCells.add(new int[] {row, col});
+                    emptyCells.add(new Cell(row, col));
                 }
             }
         }

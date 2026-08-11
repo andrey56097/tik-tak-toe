@@ -86,8 +86,11 @@ class RandomMoveStrategyTest {
                 CellState.O, CellState.X, CellState.O
         );
 
+        // The exact type matters: asserting the RuntimeException supertype would also
+        // pass on an NPE or any other accidental failure, masking a real defect.
         assertThatThrownBy(() -> strategy.decideMove("game-1", state))
-                .isInstanceOf(RuntimeException.class);
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("game-1");
     }
 
     /**
