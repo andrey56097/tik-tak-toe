@@ -491,3 +491,4 @@ This milestone closes the assignment's **"Testing & Validation"** section entire
 - Message broker (Kafka/RabbitMQ) instead of synchronous REST between Session and Engine
 - H2 in persistent (file) mode instead of in-memory — state recovery after restart
 - Multiple parallel game sessions at once
+- **Session crash-recovery during a move** — if `GameSessionOrchestrator` crashes before, during, or after the REST call to Engine, the game is left `IN_PROGRESS` with nothing to resume it (orchestration state is in-memory only in Session, no idempotency key on the Session→Engine move call). Consistent with the Orchestration-not-Saga decision above; fixing it would need persisted orchestration state + an idempotency key so Session can detect "did my last move actually apply" after a restart
