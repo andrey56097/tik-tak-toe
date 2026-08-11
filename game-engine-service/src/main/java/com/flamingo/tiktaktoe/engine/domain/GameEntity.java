@@ -8,6 +8,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
+import jakarta.persistence.Version;
 
 import java.util.UUID;
 
@@ -33,6 +34,19 @@ public class GameEntity {
 
     @Enumerated(EnumType.STRING)
     private CellState winner;
+
+    /**
+     * Optimistic lock. Two moves submitted for one game concurrently both read
+     * the same version; the first write bumps it and the second fails its
+     * version check instead of silently overwriting the first move. The loser
+     * surfaces as {@code OptimisticLockingFailureException}, which
+     * {@link com.flamingo.tiktaktoe.engine.exception.GameExceptionHandler}
+     * answers with 409 — a conflicting write, not a server fault.
+     *
+     * <p>Managed entirely by JPA: never set it by hand.
+     */
+    @Version
+    private Long version;
 
     protected GameEntity() {
         // for JPA
@@ -78,6 +92,10 @@ public class GameEntity {
 
     public void setNextTurn(CellState nextTurn) {
         this.nextTurn = nextTurn;
+    }
+
+    public Long getVersion() {
+        return version;
     }
 
     public CellState getWinner() {

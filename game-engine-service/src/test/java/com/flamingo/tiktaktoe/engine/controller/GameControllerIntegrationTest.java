@@ -121,7 +121,10 @@ class GameControllerIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"row\":0,\"col\":0}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(content().contentType(MediaType.TEXT_PLAIN_VALUE + ";charset=UTF-8"))
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("player")));
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Bad Request"))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("player")))
+                .andExpect(jsonPath("$.path").value("/games/" + id + "/move"));
     }
 }

@@ -2,6 +2,7 @@ package com.flamingo.tiktaktoe.engine.service;
 
 import com.flamingo.tiktaktoe.common.CellState;
 import com.flamingo.tiktaktoe.common.GameState;
+import com.flamingo.tiktaktoe.common.GameStateFactory;
 import com.flamingo.tiktaktoe.common.GameStatus;
 import com.flamingo.tiktaktoe.common.MoveRequest;
 import com.flamingo.tiktaktoe.engine.domain.GameEntity;
@@ -15,7 +16,6 @@ import com.flamingo.tiktaktoe.engine.validation.WinnerChecker;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -84,23 +84,18 @@ public class GameEngineService {
     /**
      * Builds a brand-new game with an empty board, using the caller-supplied
      * id (so it can be looked up again via {@code GET /games/{gameId}}).
+     *
+     * <p>The starting board comes from {@link GameStateFactory} in {@code common}
+     * rather than being built here: CLAUDE.md requires shared value-object
+     * factories to live in {@code common} instead of being copy-pasted per
+     * service. Its immutability is not a problem — the board is only serialised
+     * here, and every later mutation happens on the fresh list that
+     * {@code mapper.parseBoard} returns.
      */
     private GameEntity createGame(String gameId) {
         GameEntity entity = new GameEntity(gameId, null, GameStatus.IN_PROGRESS, CellState.X);
-        mapper.writeBoard(entity, emptyBoard());
+        mapper.writeBoard(entity, GameStateFactory.empty(gameId).board());
         return entity;
-    }
-
-    private List<List<CellState>> emptyBoard() {
-        List<List<CellState>> board = new ArrayList<>();
-        board.add(emptyRow());
-        board.add(emptyRow());
-        board.add(emptyRow());
-        return board;
-    }
-
-    private List<CellState> emptyRow() {
-        return new ArrayList<>(List.of(CellState.EMPTY, CellState.EMPTY, CellState.EMPTY));
     }
 
     /**
