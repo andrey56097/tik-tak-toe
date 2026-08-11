@@ -31,6 +31,14 @@ public interface SessionStore {
      * Atomically claims a {@code CREATED} session for running: transitions it
      * to {@code RUNNING} and returns the new record.
      *
+     * <p><strong>Atomic is a requirement, not a description.</strong> Two
+     * callers racing to start the same session must produce exactly one run and
+     * one {@link SessionConflictException}. A read-then-write implementation
+     * would let both observe {@code CREATED} and both proceed, so a DB-backed
+     * store must push the check into the write itself — {@code UPDATE ... SET
+     * status = 'RUNNING' WHERE id = ? AND status = 'CREATED'}, treating an
+     * update count of zero as the conflict.
+     *
      * @param sessionId the session id
      * @return the new {@code RUNNING} record
      * @throws SessionNotFoundException if no session with that id exists

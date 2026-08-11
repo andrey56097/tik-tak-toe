@@ -75,7 +75,19 @@ public class SessionSimulationRunner {
 
                 store.save(new SessionRecord(sessionId, SessionStatus.RUNNING,
                         currentState, List.copyOf(history)));
+
                 pauseBetweenMoves();
+                if (Thread.currentThread().isInterrupted()) {
+                    // Shutdown: keeping the loop going would fire up to eight more
+                    // Engine calls, each with retries and backoff, and stall the
+                    // shutdown for tens of seconds. The session cannot finish, so
+                    // end it rather than pretend otherwise.
+                    log.warn("Auto-play simulation for session {} interrupted after {} move(s); ending as FAILED",
+                            sessionId, history.size());
+                    store.save(new SessionRecord(sessionId, SessionStatus.FAILED,
+                            currentState, List.copyOf(history)));
+                    return;
+                }
             }
             log.error("Auto-play simulation for session {} did not reach a terminal state within {} moves",
                     sessionId, MAX_MOVES);

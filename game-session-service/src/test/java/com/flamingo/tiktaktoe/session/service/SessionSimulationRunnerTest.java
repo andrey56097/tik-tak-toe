@@ -195,34 +195,40 @@ class SessionSimulationRunnerTest {
 
     @Test
     @Timeout(10)
-    void run_whenInterruptedDuringPause_restoresInterruptFlag_andStillCompletes() throws Exception {
+    void run_whenInterruptedDuringPause_stopsTheLoop_andEndsTheSessionFailed() throws Exception {
         String sessionId = "s1";
         saveCreated(sessionId);
 
         // Long pause guarantees the worker is still sleeping when the test interrupts it.
         SessionSimulationRunner pausedRunner = new SessionSimulationRunner(gameEngineClient, moveStrategy, store, 10_000L);
 
-        when(moveStrategy.decideMove(eq(sessionId), any(GameState.class)))
-                .thenReturn(new MoveRequest(CellState.X, 0, 0),
-                        new MoveRequest(CellState.O, 1, 1));
+        MoveRequest first = new MoveRequest(CellState.X, 0, 0);
+        when(moveStrategy.decideMove(eq(sessionId), any(GameState.class))).thenReturn(first);
+        // Never terminal: only an honoured interrupt can end this run.
         when(gameEngineClient.makeMove(eq(sessionId), any(MoveRequest.class)))
-                .thenReturn(boardState(sessionId, GameStatus.IN_PROGRESS),
-                        boardState(sessionId, GameStatus.WIN));
+                .thenReturn(boardState(sessionId, GameStatus.IN_PROGRESS));
 
         Thread worker = new Thread(() -> pausedRunner.run(sessionId));
         worker.start();
 
-        // Let the worker reach the long sleep, then interrupt it mid-pause. The interrupt
-        // either lands during Thread.sleep (which then throws immediately) or just before it
-        // (which makes it throw immediately) — both exercise the InterruptedException path.
+        // Let the worker reach the long sleep, then interrupt it mid-pause.
         Thread.sleep(300);
         worker.interrupt();
         worker.join(5000);
 
-        assertThat(worker.isInterrupted())
-                .as("the interrupt flag must be restored after InterruptedException")
-                .isTrue();
-        assertThat(store.find(sessionId).status()).isEqualTo(SessionStatus.COMPLETED);
+        assertThat(worker.isAlive())
+                .as("an interrupted simulation must stop, not keep calling the Engine")
+                .isFalse();
+        // Exactly one move: the interrupt landed in the pause after it, so the loop
+        // must not have started a second iteration.
+        verify(gameEngineClient, times(1)).makeMove(eq(sessionId), any(MoveRequest.class));
+
+        SessionRecord record = store.find(sessionId);
+        assertThat(record.status())
+                .as("a simulation that cannot finish must not be left looking RUNNING")
+                .isEqualTo(SessionStatus.FAILED);
+        assertThat(record.moveHistory()).containsExactly(
+                new MoveHistoryEntry(first.player(), first.row(), first.col()));
     }
 
     private static GameState boardState(String gameId, GameStatus status) {
