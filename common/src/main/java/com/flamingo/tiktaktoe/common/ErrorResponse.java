@@ -8,9 +8,7 @@ import java.time.Instant;
  * creation time.
  *
  * <p>Lives in {@code common} because it is the shared error contract of the
- * whole system, but Session is its only adopter so far — Engine still answers
- * with plain-text bodies and switches over in a later pass (see the Deferred
- * section of the Milestone 3 plan).
+ * whole system: Engine and Session both answer errors in this shape.
  *
  * @param timestamp when the error occurred
  * @param status    the HTTP status code

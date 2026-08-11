@@ -15,7 +15,6 @@ import java.util.concurrent.ThreadLocalRandom;
 @Component
 public class RandomMoveStrategy implements MoveStrategy {
 
-    /** A board coordinate — named components beat {@code int[]}'s positional indices. */
     private record Cell(int row, int col) {
     }
 

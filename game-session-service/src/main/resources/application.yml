@@ -5,8 +5,9 @@ spring:
     # The @Async auto-play loop is almost entirely blocked: ~9 moves x move-delay-ms
     # of sleeping plus the Engine round-trips. On the default platform-thread executor
     # (8 core threads, unbounded queue) the 9th concurrent session would silently
-    # queue behind the others. Virtual threads (Java 21) make one carrier thread serve
-    # all of them, so concurrent sessions are bounded by memory instead of pool size.
+    # queue behind the others. Virtual threads (Java 21) let a blocked session unmount
+    # from its carrier thread instead of occupying it, so concurrent sessions are
+    # bounded by memory rather than pool size.
     virtual:
       enabled: true
 

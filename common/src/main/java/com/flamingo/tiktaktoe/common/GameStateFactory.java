@@ -4,13 +4,11 @@ import java.util.List;
 
 /**
  * Factory for {@link GameState} values. Centralizes the "known-fresh" board
- * shape so it is written down once.
+ * shape so it is written down once — Session starts its simulation from it and
+ * Engine seeds a newly created game with it.
  *
- * <p>Only Session uses it today. Engine still builds its starting board in
- * {@code GameEngineService} and cannot simply adopt this method as-is: the
- * board returned here is immutable ({@link List#of}), while Engine updates
- * cells in place. Unifying the two is a deliberate later step, not an
- * oversight — see the Deferred section of the Milestone 3 plan.
+ * <p>The board it returns is immutable ({@link List#of}), so a caller that
+ * needs to update cells in place must copy it first.
  */
 public final class GameStateFactory {
 

@@ -5,8 +5,9 @@ import com.flamingo.tiktaktoe.common.GameState;
 import java.util.List;
 
 /**
- * In-memory record of an auto-play session, held as the value type of the
- * session store ({@code ConcurrentHashMap<String, SessionRecord>}).
+ * Record of an auto-play session — the value type of {@link
+ * com.flamingo.tiktaktoe.session.store.SessionStore}, independent of how any
+ * given store holds it.
  *
  * @param sessionId   the session id
  * @param status      the session's lifecycle status

@@ -27,13 +27,6 @@ import org.springframework.web.client.RestClient;
 @Configuration
 public class RestClientConfig {
 
-    /**
-     * Builds a request factory with the given connect/read timeouts.
-     *
-     * @param connectTimeoutMs connect timeout in milliseconds
-     * @param readTimeoutMs    read timeout in milliseconds
-     * @return the configured request factory
-     */
     private SimpleClientHttpRequestFactory requestFactory(int connectTimeoutMs, int readTimeoutMs) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(connectTimeoutMs);
