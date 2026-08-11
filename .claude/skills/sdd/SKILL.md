@@ -92,6 +92,15 @@ of red-green ordering.
 
 ## Rules
 
+- **Never `git commit` or `git push` at any point in this process without the
+  user explicitly confirming first** — not after the test subagent, not after
+  the implementer, not after the reviewer approves, not even for a one-line
+  skill/doc fix discovered mid-task. Finishing the sdd loop (tests written,
+  code green, reviewer approved) is not itself permission to commit — it's a
+  separate CLAUDE.md rule ("Commit only after explicit user confirmation")
+  that stays in force throughout, with zero exceptions. Present the diff and
+  stop; wait for the user's explicit go-ahead every single time, even for
+  changes to this skill file itself.
 - **The test-writer and the implementer must be two different subagent
   dispatches, every time** — never one agent doing both under the label "TDD",
   no exceptions for "small" or "obvious" changes.
