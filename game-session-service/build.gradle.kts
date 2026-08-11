@@ -23,7 +23,20 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-websocket")
     implementation(project(":common"))
+    // @Retryable on RestGameEngineClient.makeMove. spring-retry is not covered by the
+    // Spring Boot BOM, so its version is pinned explicitly. @EnableRetry (used by this
+    // part's retry test, and by AsyncConfig in Part C) is meta-annotated with
+    // @EnableAspectJAutoProxy, which registers AnnotationAwareAspectJAutoProxyCreator;
+    // that class's static init touches org.aspectj.weaver.Advice whether or not any
+    // AspectJ pointcut is used, so aspectjweaver must be on the runtime classpath or
+    // the context fails to refresh with NoClassDefFoundError. Runtime-only is enough —
+    // nothing is woven here. Note `spring-boot-starter-aop` does not exist for Boot 4.x
+    // (last published at 4.0.0-M2); aspectjweaver's version IS BOM-managed.
+    implementation("org.springframework.retry:spring-retry:2.0.13")
+    runtimeOnly("org.aspectj:aspectjweaver")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    // MockWebServer (okhttp 4.x) — backs RestGameEngineClientRetryTest's real HTTP endpoint.
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
