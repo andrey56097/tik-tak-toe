@@ -1,28 +1,27 @@
 package com.flamingo.tiktaktoe.engine.service;
 
-import com.flamingo.tiktaktoe.engine.controller.*;
-import com.flamingo.tiktaktoe.engine.service.*;
-import com.flamingo.tiktaktoe.engine.domain.*;
-import com.flamingo.tiktaktoe.engine.repository.*;
-import com.flamingo.tiktaktoe.engine.validation.*;
-import com.flamingo.tiktaktoe.engine.exception.*;
-import com.flamingo.tiktaktoe.engine.mapper.*;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flamingo.tiktaktoe.common.CellState;
 import com.flamingo.tiktaktoe.common.GameState;
 import com.flamingo.tiktaktoe.common.GameStatus;
 import com.flamingo.tiktaktoe.common.MoveRequest;
+import com.flamingo.tiktaktoe.engine.domain.GameEntity;
+import com.flamingo.tiktaktoe.engine.exception.GameConflictException;
+import com.flamingo.tiktaktoe.engine.exception.GameNotFoundException;
+import com.flamingo.tiktaktoe.engine.exception.InvalidMoveException;
+import com.flamingo.tiktaktoe.engine.mapper.GameMapper;
+import com.flamingo.tiktaktoe.engine.repository.GameRepository;
+import com.flamingo.tiktaktoe.engine.validation.MoveValidator;
+import com.flamingo.tiktaktoe.engine.validation.WinnerChecker;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
-import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -148,5 +147,48 @@ class GameEngineServiceTest {
         when(repository.findById("g1")).thenReturn(Optional.of(game));
         assertThatThrownBy(() -> service.makeMove("g1", new MoveRequest(CellState.X, 0, 0)))
                 .isInstanceOf(GameConflictException.class);
+    }
+
+    @Test
+    void makeMoveCreatesFreshGameWhenIdNotFound() {
+        when(repository.findById("brand-new")).thenReturn(Optional.empty());
+        ArgumentCaptor<GameEntity> captor = ArgumentCaptor.forClass(GameEntity.class);
+        when(repository.save(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
+
+        GameState state = service.makeMove("brand-new", new MoveRequest(CellState.X, 0, 0));
+
+        GameEntity saved = captor.getValue();
+        assertThat(saved.getId()).isEqualTo("brand-new");
+        assertThat(state.id()).isEqualTo("brand-new");
+        assertThat(state.board().get(0).get(0)).isEqualTo(CellState.X);
+        // rest of the fresh 3x3 board must still be empty
+        assertThat(state.board().get(0).get(1)).isEqualTo(CellState.EMPTY);
+        assertThat(state.board().get(1).get(0)).isEqualTo(CellState.EMPTY);
+        assertThat(state.nextTurn()).isEqualTo(CellState.O);
+        assertThat(state.status()).isEqualTo(GameStatus.IN_PROGRESS);
+        assertThat(state.winner()).isNull();
+    }
+
+    @Test
+    void secondMoveOnFreshlyCreatedGameBehavesLikeExistingGameMove() {
+        when(repository.findById("brand-new")).thenReturn(Optional.empty());
+        ArgumentCaptor<GameEntity> captor = ArgumentCaptor.forClass(GameEntity.class);
+        when(repository.save(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
+
+        // first move creates the game on the fly (X plays (0,0))
+        service.makeMove("brand-new", new MoveRequest(CellState.X, 0, 0));
+        GameEntity created = captor.getValue();
+
+        // simulate the created game now being a persisted, findable row
+        when(repository.findById("brand-new")).thenReturn(Optional.of(created));
+
+        // second move must follow the normal existing-game path: no re-creation,
+        // board/turn state carries over from the first move
+        GameState state = service.makeMove("brand-new", new MoveRequest(CellState.O, 0, 1));
+
+        assertThat(state.board().get(0).get(0)).isEqualTo(CellState.X);
+        assertThat(state.board().get(0).get(1)).isEqualTo(CellState.O);
+        assertThat(state.nextTurn()).isEqualTo(CellState.X);
+        assertThat(state.status()).isEqualTo(GameStatus.IN_PROGRESS);
     }
 }

@@ -15,6 +15,7 @@ import com.flamingo.tiktaktoe.engine.validation.WinnerChecker;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -46,11 +47,13 @@ public class GameEngineService {
     }
 
     /**
-     * Applies a move: validates it, updates the board, detects outcome.
+     * Applies a move: validates it, updates the board, detects outcome. If no
+     * game exists yet for {@code gameId}, one is created on the fly (upsert)
+     * so that Session doesn't need a separate "create game" endpoint.
      */
     @Transactional
     public GameState makeMove(String gameId, MoveRequest move) {
-        GameEntity entity = findGame(gameId);
+        GameEntity entity = repository.findById(gameId).orElseGet(() -> createGame(gameId));
         assertPlayable(entity, move);
 
         List<List<CellState>> board = mapper.parseBoard(entity.getBoard());
@@ -79,8 +82,30 @@ public class GameEngineService {
     }
 
     /**
+     * Builds a brand-new game with an empty board, using the caller-supplied
+     * id (so it can be looked up again via {@code GET /games/{gameId}}).
+     */
+    private GameEntity createGame(String gameId) {
+        GameEntity entity = new GameEntity(gameId, null, GameStatus.IN_PROGRESS, CellState.X);
+        mapper.writeBoard(entity, emptyBoard());
+        return entity;
+    }
+
+    private List<List<CellState>> emptyBoard() {
+        List<List<CellState>> board = new ArrayList<>();
+        board.add(emptyRow());
+        board.add(emptyRow());
+        board.add(emptyRow());
+        return board;
+    }
+
+    private List<CellState> emptyRow() {
+        return new ArrayList<>(List.of(CellState.EMPTY, CellState.EMPTY, CellState.EMPTY));
+    }
+
+    /**
      * Checks that a move can even be attempted right now: the game must still
-     * be in progress, and it must be this player's turn.
+     * be in progress,   and it must be this player's turn.
      */
     private void assertPlayable(GameEntity entity, MoveRequest move) {
         if (entity.getStatus() != GameStatus.IN_PROGRESS) {
