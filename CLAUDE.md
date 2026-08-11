@@ -22,7 +22,7 @@ suggestions — they are the acceptance criteria for all implementation work.
 - **Strategy** — move logic (`MoveStrategy`, `RandomMoveStrategy`, later `MinimaxMoveStrategy`)
 - **Repository** — data access (`GameRepository extends JpaRepository`), so the DB can be swapped
 - **Adapter / Ports & Adapters** — wrap external clients (`GameEngineClient` wraps `RestClient`); swap transport without touching business logic
-- **Observer / Pub-Sub** — WebSocket (STOMP topic) for pushing updates
+- **Observer / Pub-Sub** — `GameUpdatePublisher` for pushing state updates to the UI (SSE stream; the UI polls until Milestone 5)
 - **Factory / Builder** — create domain objects via static factories or builders, not long public constructors
 - **DTO** — keep JPA entities (`GameEntity`) separate from API models (`GameState`, `MoveRequest`); the DB schema must never leak through the REST contract
 
@@ -38,7 +38,7 @@ This project treats persistence as swappable **by design**:
 
 - Business logic must depend only on `GameRepository` (the interface), never on JPA or H2 specifics.
 - A DB swap = new repository implementation + config, **zero changes** to services, controllers, or DTOs.
-- Same seam principle applies to: move strategy (random → minimax), Engine transport (REST → broker), update delivery (WebSocket → SSE).
+- Same seam principle applies to: move strategy (random → minimax), Engine transport (REST → broker), update delivery (polling → SSE → WebSocket).
 
 ### Error handling
 
@@ -172,7 +172,7 @@ How the services talk:
 
 - Browser → **Gateway** (`:8080`), which routes by name (`lb://GAME-SESSION-SERVICE`, …) using Eureka addresses.
 - Session → Engine: **synchronous REST** via `RestClient` (`@LoadBalanced`, connect+read timeouts). Never `WebClient` + `.block()` — see Spring & Web Production Standards.
-- Session → UI: **WebSocket** (STOMP + SockJS), topic `/topic/game/{id}`.
+- Session → UI: the browser **polls** `GET /sessions/{id}` (Milestone 4), then switches to an **SSE** stream `GET /sessions/{id}/stream` (Milestone 5). The UI renders from *full* state via one `render(state)` function — never from deltas — which is what makes the transport swappable. WebSocket + STOMP is the documented alternative, not the current design.
 - Engine → H2: Spring Data JPA (`jdbc:h2:mem:games;DB_CLOSE_DELAY=-1`).
 - Each REST service (Engine, Session) exposes its API docs via **springdoc-openapi** (`/v3/api-docs` + Swagger UI) — see Version gotchas.
 
@@ -183,7 +183,7 @@ Coordination pattern: **Orchestration** — `GameSessionOrchestrator` (Session) 
 Concrete class names from the plan — use these when implementing or reviewing:
 
 - **Engine:** `GameController` (HTTP) · `GameEngineService` (rules) · `GameEntity` + `GameRepository extends JpaRepository<GameEntity, String>` · `MoveValidator` · `WinnerChecker`.
-- **Session:** `GameSessionOrchestrator` · `SessionSimulationRunner` (the `@Async` move loop) · `SessionStore` (`InMemorySessionStore`) · `MoveStrategy` (`RandomMoveStrategy` for v1, `MinimaxMoveStrategy` later) · `GameEngineClient` (`RestGameEngineClient`) · `GameUpdatePublisher`.
+- **Session:** `GameSessionOrchestrator` · `SessionSimulationRunner` (the `@Async` move loop) · `SessionStore` (`InMemorySessionStore`) · `MoveStrategy` (`RandomMoveStrategy` for v1, `MinimaxMoveStrategy` later) · `GameEngineClient` (`RestGameEngineClient`) · `GameUpdatePublisher` (`SseGameUpdatePublisher`, Milestone 5).
 - **`common` module (DRY):** `GameState`, `MoveRequest`, `CellState`, `GameStatus` — shared by Engine and Session, never copy-pasted. `GameStatus` is exactly `task.md`'s three values — `IN_PROGRESS` / `WIN` / `DRAW`; whose turn it is is **not** a status but a separate `GameState.nextTurn` field (X/O). `GameState` carries a `winner` (X/O/null); `MoveRequest` carries `player` (X/O) + `row`/`col` — Engine validates the submitted `player` matches whose turn.
 - **Concurrency:** write-time sync via `@Transactional` + optimistic locking (`@Version`), or `synchronized`/`ReentrantLock` per `gameId`. Two parallel moves on one game → one applied, the other gets 409.
 
@@ -202,5 +202,5 @@ Concrete class names from the plan — use these when implementing or reviewing:
 - **Package structure: organize code by layer into subpackages** under the module root (e.g. `com.flamingo.tiktaktoe.engine.<layer>`): `controller`, `service`, `domain`, `repository`, `mapper`, `validation`, `exception`. Do not dump all classes into one flat package once a module grows beyond a few files. **Tests mirror the same subpackages** (e.g. `MoveValidatorTest` lives in `validation/`).
 - Package root: `com.flamingo.tiktaktoe`.
 - **Requirements source of truth:** `docs/task.md` — the assignment (home task). The plan (`docs/tic-tac-toe-plan.md`) is built on it and tracks it item-by-item; read **both** before large work. If plan and task ever disagree, `task.md` wins.
-- **Current scope: skeleton app (Milestone 0).** Roadmap: 1 Engine+H2 → 2 Eureka → 3 Session → 4 WebSocket → 5 UI → 6 Gateway → 7 Testing → 8 Docker → 9 Polish. Full detail in the plan.
+- **Roadmap:** 1 Engine+H2 → 2 Eureka → 3 Session → **4 UI (polling)** → **5 SSE push** → 6 Gateway → 7 Testing → 8 CI → 9 Docker → 10 Polish → 11 K8s. Milestones 1–3 are done. UI comes *before* the push channel on purpose: it makes all three `task.md` components exist and talk to each other at the earliest point, so everything after is an improvement on a working system. Full detail in the plan.
 - Once the monorepo lands, run Gradle per service directory (`./gradlew test` inside each module), not from the root.

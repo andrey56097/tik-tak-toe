@@ -14,7 +14,7 @@
 | Game state storage (Engine) | **H2 (in-memory mode)** — via Spring Data JPA |
 | Session state storage (Session) | **In-memory** (`ConcurrentHashMap`) for session + move history (KISS); Engine remains the persistent source of game state |
 | Session ↔ Engine communication | REST via **`RestClient`** (`@LoadBalanced`, connect+read timeouts) on the Session→Engine boundary |
-| Session → UI communication | WebSocket (STOMP + SockJS) |
+| Session → UI communication | **Polling first** (`GET /sessions/{id}`, Milestone 4), then **SSE** push (Milestone 5). The traffic is strictly one-way (server → browser), which is exactly SSE's shape: native `EventSource`, zero JS libraries, automatic reconnect, and `Last-Event-ID` replay. WebSocket + STOMP was the earlier choice and is kept as the documented alternative — see *Possible future improvements* |
 | Move strategy (v1) | Random move (simple implementation) |
 | Testing (unit) | JUnit 5 + Mockito |
 | Testing (integration) | Spring Boot Test, `@SpringBootTest`, `MockWebServer` / `WireMock`, Testcontainers (optional) |
@@ -107,7 +107,7 @@ public interface GameRepository extends JpaRepository<GameEntity, String> {
 // without knowing whether H2, Postgres, or MongoDB sits behind it (when switching to Spring Data Mongo)
 ```
 
-**Observer / Publish-Subscribe** — already effectively used in the WebSocket pairing (a STOMP topic is pub/sub): `GameBroadcaster` publishes an event, the UI is subscribed to the topic, unaware of the Session Service's existence directly.
+**Observer / Publish-Subscribe** — the update channel to the UI: `GameUpdatePublisher` publishes a state update, subscribers receive it without the publisher knowing who they are. Milestone 5 implements this over SSE (one `SseEmitter` per subscribed session); the same interface would accept a STOMP-topic implementation unchanged.
 
 **Adapter** — `GameEngineClient` wraps the HTTP client behind its own interface:
 ```java
@@ -137,8 +137,8 @@ If Engine is tomorrow called via gRPC or a message broker instead of REST — on
 | **Layered Architecture** inside each service | Controller → Service → Repository, strictly top-down, no reverse dependencies |
 | **API Gateway** | Spring Cloud Gateway — single entry point (already in the plan) |
 | **Service Discovery** | Eureka (already in the plan) |
-| **Ports & Adapters (Hexagonal)**, partially | Business logic (`GameEngineService`, `GameSessionOrchestrator`) depends only on interfaces (`GameRepository`, `MoveStrategy`, `GameEngineClient`); concrete implementations (JPA, REST, WebSocket) are "adapters" plugged in externally via Spring DI |
-| **Publish-Subscribe / Observer** | WebSocket (STOMP topic) — Session publishes state updates, UI subscribes, neither knows the other directly |
+| **Ports & Adapters (Hexagonal)**, partially | Business logic (`GameEngineService`, `GameSessionOrchestrator`) depends only on interfaces (`GameRepository`, `MoveStrategy`, `GameEngineClient`); concrete implementations (JPA, REST, SSE) are "adapters" plugged in externally via Spring DI |
+| **Publish-Subscribe / Observer** | SSE stream (Milestone 5) — Session publishes state updates, the UI subscribes, neither knows the other directly. Until then the UI polls, which needs no publisher at all |
 | **Retry / Circuit Breaker** | `@Retryable` (Spring Boot 4, built-in) at the Session → Engine boundary; `resilience4j-spring-boot4` if a full Circuit Breaker is needed |
 
 > **Why Orchestration and not Saga:** *Saga* implies compensating transactions (undo earlier steps on failure). For a self-playing Tic Tac Toe there is no business need to roll back — a failed move simply ends the session with an error. This matches `task.md` (no distributed-atomicity requirement) and KISS/YAGNI. If a compensation flow is ever needed, it can be added on top of the same orchestrator.
@@ -155,7 +155,7 @@ If Engine is tomorrow called via gRPC or a message broker instead of REST — on
 | Replace H2 with Postgres/MongoDB | Dependency in `build.gradle.kts` + `application.yml` + the `GameRepository` implementation | `GameEngineService`, controllers, DTOs |
 | Replace random moves with Minimax | Add `MinimaxMoveStrategy`, switch the bean | `GameSessionOrchestrator`, all other code |
 | Replace REST with a message broker between Session/Engine | New `GameEngineClient` implementation (e.g. `KafkaGameEngineClient`) | Orchestration business logic |
-| Add SSE instead of / alongside WebSocket | New update-publisher implementation behind the `GameUpdatePublisher` interface | `GameSessionOrchestrator` |
+| Swap polling → SSE, or SSE → WebSocket | Backend: a new implementation behind `GameUpdatePublisher`. Frontend: the one line that feeds `render(state)` | `GameSessionOrchestrator`, the REST endpoints, and `render(state)` itself — all unchanged |
 
 ---
 
@@ -184,7 +184,7 @@ graph TB
     Gateway -->|lb://GAME-ENGINE-SERVICE| Engine
 
     Session -->|REST, sync| Engine
-    Session -.->|WebSocket, push| UI
+    Browser -.->|"poll GET /sessions/{id} (M4)<br/>then SSE stream (M5)"| Session
 
     UI -.->|registration| Eureka
     Session -.->|registration| Eureka
@@ -196,37 +196,40 @@ graph TB
 
 ```mermaid
 sequenceDiagram
-    participant B as Browser
-    participant GW as Gateway
+    participant B as Browser (UI page)
     participant S as Game Session
     participant E as Game Engine
     participant DB as H2
-    participant U as UI (WebSocket)
 
-    B->>GW: POST /sessions
-    GW->>S: proxy request
-    S->>E: POST /sessions (Session initializes game in Engine)
-    E->>DB: INSERT new game
-    E-->>S: GameState (empty board)
-    S-->>GW: sessionId
-    GW-->>B: sessionId
+    B->>S: POST /sessions
+    S-->>B: 201 sessionId (status CREATED, no game yet)
 
-    loop while status == IN_PROGRESS
-        S->>S: decideMove() — random move
+    B->>S: POST /sessions/{id}/simulate
+    S-->>B: 202 Accepted (loop runs on a background thread)
+
+    loop at most 9 moves, until WIN / DRAW
+        S->>S: decideMove() — random empty cell
         S->>E: POST /games/{id}/move
+        Note over E: first call also creates the game (upsert)
         E->>E: validate move
         alt move invalid
-            E-->>S: 409 Conflict / error
-            S->>S: handle error, abort/retry
+            E-->>S: 400 / 409 + ErrorResponse
+            S->>S: log, mark session FAILED, stop
         else move valid
-            E->>DB: UPDATE game state
+            E->>DB: INSERT / UPDATE game state
             E-->>S: GameState (updated)
-            S-->>U: WebSocket push /topic/game/{id}
-            U-->>B: redraw board
+            S->>S: store SessionRecord (status, board, history)
         end
     end
 
-    Note over S,U: Game Over — status WIN / DRAW (winner via GameState.winner)
+    par UI keeps itself current
+        B->>S: GET /sessions/{id} every 500ms (M4)
+        S-->>B: SessionResponse — render(state)
+    and after Milestone 5
+        S-->>B: SSE event per move — render(state)
+    end
+
+    Note over S,E: Game Over — status WIN / DRAW (winner via GameState.winner)
 ```
 
 ## Roles & how a move happens
@@ -244,30 +247,39 @@ So: **moves are made on the backend** — the Game Session decides the move, the
 ### How it works — the flow
 
 ```
-[UI]                     [Session]                          [Engine]
+[UI page]                 [Session]                          [Engine]
  │                          │                                  │
- │  POST /sessions      │  creates session, returns id     │
+ │  POST /sessions          │  creates session (CREATED)       │
  │─────────────────────────>│                                  │
- │                          │  creates game in Engine (via     │
- │                          │  POST /sessions, M3)             │
- │                          │─────────────────────────────────>│
- │                          │  ── auto-play loop ──            │
- │  POST /sessions/{id} │                                  │
- │  /simulate               │  decideMove() (random)           │
- │─────────────────────────>│─────────────────────────────────>│
+ │       201 sessionId      │                                  │
+ │<─────────────────────────│                                  │
+ │                          │                                  │
+ │  POST /sessions/{id}     │  claims session RUNNING,         │
+ │  /simulate               │  hands off to background thread  │
+ │─────────────────────────>│                                  │
+ │       202 Accepted       │                                  │
+ │<─────────────────────────│  ── auto-play loop (max 9) ──    │
+ │                          │  decideMove() (random)           │
  │                          │  POST /games/{id}/move           │
  │                          │─────────────────────────────────>│
+ │                          │  (first call creates the game)   │
  │                          │        GameState (validated)     │
- │  WebSocket push          │<─────────────────────────────────│
- │◀─────────────────────────│                                  │
- │  board redraws           │  ... repeats until game ends ... │
+ │                          │<─────────────────────────────────│
+ │  GET /sessions/{id}      │  ... repeats until game ends ... │
+ │  every 500ms  (M4)       │                                  │
+ │─────────────────────────>│                                  │
+ │  SessionResponse         │                                  │
+ │<─────────────────────────│                                  │
+ │  render(state)           │                                  │
 ```
 
-1. The user clicks **Start Simulation** in the UI → `POST /sessions` → Session creates a session and returns `sessionId`.
-2. The UI calls `POST /sessions/{id}/simulate` (or Session starts the loop itself).
-3. **Session** (`GameSessionOrchestrator`) runs the loop: `decideMove()` (picks a cell) → sends `POST /games/{id}/move` → **Engine** validates and applies the move, returns the new `GameState`.
-4. After every move Session **pushes the update over WebSocket** → UI redraws the board.
+1. The user clicks **Start Simulation** → `POST /sessions` → Session creates a session and returns `sessionId`.
+2. The UI calls `POST /sessions/{id}/simulate`. Session performs the not-found / already-started checks **synchronously**, then returns **202** and runs the loop on a background thread.
+3. **Session** (`GameSessionOrchestrator` → `SessionSimulationRunner`) runs the bounded loop: `decideMove()` picks an empty cell → `POST /games/{id}/move` → **Engine** validates, applies, and returns the new `GameState`. The first call also creates the game (Engine's move endpoint is an upsert), so there is no separate "create game" round-trip.
+4. The UI keeps itself current. **Milestone 4:** it polls `GET /sessions/{id}`. **Milestone 5:** Session pushes an SSE event after every move. Either way the page calls the same `render(state)`.
 5. Repeat until `IN_PROGRESS` → `WIN` / `DRAW`.
+
+> **The seam that makes step 4 swappable:** `render(state)` takes the *full* `SessionResponse` and redraws board, status and history from it — never from deltas. That makes it idempotent (rendering the same state twice changes nothing), so polling, SSE and WebSocket are interchangeable sources for it. Appending moves incrementally would break on reconnects and duplicate events, and would tie the UI to one transport.
 
 ## Testing scheme
 
@@ -351,24 +363,97 @@ graph LR
 
 ---
 
-### Milestone 4 — WebSocket wiring Session → UI *(optional — `task.md` “Real-Time Updates”; the UI requirement itself is satisfied by any live-updating board)*
-- [ ] Configure `@EnableWebSocketMessageBroker` in the Session Service
-- [ ] STOMP endpoint `/ws-game`, topic `/topic/game/{sessionId}`
-- [ ] Publish a state update after every move
+### Milestone 4 — UI Service, polling *(**required** — `task.md` component 3)*
 
-**Result:** you can subscribe to the topic (e.g. via a test STOMP client) and see real-time updates.
+The point of doing UI **before** the push channel: it makes all three `task.md`
+components exist and talk to each other, so the system is demoable end to end at
+the earliest possible moment. Everything after this milestone is an improvement
+on a working system rather than a prerequisite for one.
+
+`task.md` supports this split directly. Line 59 requires the *effect* — "a board
+updated in real time as microservices play" — while line 62 lists WebSockets/SSE
+as the **optional** *mechanism*. With `move-delay-ms: 1000`, polling every 500ms
+is visually indistinguishable from push, so this milestone alone closes the
+required part.
+
+- [ ] Add `eureka-client`, register as `UI-SERVICE`; add `application.yml` with `server.port: 8083` (the module has **no** config today, so it would collide with Gateway on 8080)
+- [ ] Drop `spring-boot-starter-websocket` from `ui-service` — the WebSocket/SSE client runs in the browser, not in this JVM. The module only serves static files
+- [ ] Static page in `src/main/resources/static/` (`index.html`, `app.js`, `app.css`) — no framework, no npm, no build step, no Thymeleaf (see the note below)
+- [ ] **CORS in the Session Service**: the page is served from `:8083` and calls `:8082`, so `GET /sessions/**` and `POST /sessions/**` must allow that origin. Removed again in Milestone 6 once everything is same-origin behind the Gateway
+- [ ] `render(state)` — one function, full state in, board + status + history redrawn. **Never** incremental
+- [ ] Poll `GET /sessions/{id}` every 500ms while the session is `CREATED`/`RUNNING`; stop on `COMPLETED`/`FAILED`
+- [ ] "Start Simulation" button → `POST /sessions` → start polling → `POST /sessions/{sessionId}/simulate`
+- [ ] Display status (`IN_PROGRESS` / `WIN` / `DRAW`), the move-history log, and backend/network errors (`task.md` line 61) — render the `ErrorResponse.message` from `common`
+
+**Why plain HTML/JS and not a framework:** a 3×3 board is nine `<div>`s. React or
+Angular would drag npm, a bundler and `node_modules` into a Gradle monorepo for
+no benefit — a direct KISS/YAGNI violation per `CLAUDE.md`. This is also a
+*backend* assignment; a frontend toolchain reads as effort spent in the wrong
+place. **Thymeleaf is equally wrong here**, for a subtler reason: server-side
+templating renders once, at page load, but our board changes nine times *after*
+load. The DOM-patching JS has to be written either way, and Thymeleaf would
+render an empty board and then never participate again.
+
+**Result:** you open `localhost:8083`, click "start", and watch the board fill
+itself, with status and move history — the whole assignment working end to end.
 
 ---
 
-### Milestone 5 — UI Service *(**required** — `task.md` component 3)*
-- [ ] Add `eureka-client`, register as `UI-SERVICE`
-- [ ] Simple HTML/JS page with a 3×3 board
-- [ ] Connect via SockJS + STOMP to the Session Service
-- [ ] Render the board on receiving updates
-- [ ] "Start Simulation" button → create session (`POST /sessions`) → trigger `POST /sessions/{sessionId}/simulate`
-- [ ] Display live status (`IN_PROGRESS` / `WIN` / `DRAW`), a move-history log, and connection errors
+### Milestone 5 — SSE push Session → UI *(optional — `task.md` “Real-Time Updates”)*
 
-**Result:** you open the page, click "start", and watch the board fill itself in real time.
+Replaces polling with a real push channel. Because `render(state)` already takes
+full state, this is a one-line change on the frontend plus a new publisher and
+one new endpoint on the backend — no DTO, orchestrator or existing-endpoint
+change.
+
+**On adding an endpoint at all.** `task.md` specifies three Session endpoints and
+this adds a fourth, so it is a deliberate decision, not an oversight. Any push
+mechanism needs a handler: SSE is HTTP, so the browser must GET *something* that
+returns `text/event-stream`. SSE could avoid a new URL via content negotiation
+(`Accept: text/event-stream` on the existing `GET /sessions/{id}`), and that is
+the more REST-pure option — but a separate path is the better production choice,
+because a stream and a snapshot need different operational treatment:
+
+- **Timeouts** — a stream lives for the whole game, a snapshot for milliseconds.
+  Proxies and gateways cut idle connections; raising that limit for one route is
+  fine, raising it for all reads of `/sessions/{id}` hides real hangs.
+- **Buffering** — SSE breaks if a proxy buffers the response (events arrive in
+  one burst at the end). Disabling buffering is a per-route setting; branching on
+  `Accept` is poorly supported.
+- **Caching** — a snapshot may be cached/ETagged, a stream never. Sharing a URI
+  makes correctness depend on `Vary: Accept`, a well-known source of CDN bugs.
+- **Metrics** — mixing millisecond snapshots and minute-long streams into one
+  latency series makes p99 meaningless. Separate URIs separate the series.
+- **OpenAPI** — two operations on the same path+method render badly in Swagger UI.
+
+Note WebSocket would have no such choice: its handshake is registered outside the
+`@RestController` (`registerStompEndpoints`), so a dedicated path is mandatory.
+SSE is the only push option that *could* have avoided a new URL.
+
+**Why SSE rather than WebSocket + STOMP:** after "Start" the browser sends the
+server nothing — the start itself is an ordinary `POST /sessions/{id}/simulate`.
+The channel is strictly one-way, which is exactly what SSE is for: native
+`EventSource`, **zero** JS libraries to vendor, automatic reconnect, and
+`Last-Event-ID` replay of events missed during a drop. WebSocket is a
+bidirectional transport plus a message broker plus two JS libraries, solving a
+problem this system does not have. The comparison itself is a deliverable —
+`task.md` line 89 invites a discussion of alternative designs, so it goes in the
+README.
+
+- [ ] `GameUpdatePublisher` interface in Session (port) + `SseGameUpdatePublisher` implementation holding the emitter registry. `SessionSimulationRunner` depends on the **interface**, so a WebSocket implementation would swap in with no change to the loop
+- [ ] `GET /sessions/{sessionId}/stream` (`produces = text/event-stream`), returning an `SseEmitter`. Unknown id → `SessionNotFoundException` → the same 404 `ErrorResponse` as everywhere else
+- [ ] **Send the current state as the very first event on subscribe** — a client attaching mid-game must not stare at an empty board until the next move. Same payload as `GET /sessions/{id}`
+- [ ] Support multiple subscribers per session (registry is `sessionId` → collection of emitters)
+- [ ] Publish an event after every applied move, carrying the same `SessionResponse` the polling endpoint returns — so `render(state)` is untouched
+- [ ] Set an event id per move so `Last-Event-ID` can replay what was missed after a reconnect
+- [ ] **Signal termination explicitly** with a named `done` event, then complete the emitter. `EventSource` **auto-reconnects when a stream closes**, so completing silently on `WIN`/`DRAW` would make the browser reopen the connection in a loop; the client must call `eventSource.close()` on `done`
+- [ ] Emitter timeout comfortably above the worst-case game (9 × `move-delay-ms` + Engine round-trips and retries)
+- [ ] Evict emitters on completion, timeout, error and client disconnect (`onCompletion`/`onTimeout`/`onError`) — otherwise the registry leaks
+- [ ] Frontend: replace the polling call with `new EventSource(...)`; `render(state)` untouched
+- [ ] Keep polling as the documented fallback in the README
+
+**Result:** the board updates the instant a move is applied, with no polling
+traffic; the UI code above `render(state)` is unchanged.
 
 ---
 
@@ -377,6 +462,8 @@ graph LR
 - [ ] Route to `GAME-SESSION-SERVICE` (`/sessions/**`)
 - [ ] Route to `GAME-ENGINE-SERVICE` (`/games/**`) — optional, for direct access/debugging
 - [ ] Route to `UI-SERVICE` (`/**`, lowest priority)
+- [ ] Confirm the SSE route streams rather than buffers — a gateway that buffers the response would break `text/event-stream`
+- [ ] **Remove the CORS configuration added in Milestone 4** — everything is served from `localhost:8080`, so the page and the API are same-origin and CORS becomes dead configuration
 - [ ] Verify that the whole flow works through the single port `localhost:8080`
 
 **Result:** the entire system is reachable from one entry point; the browser doesn't know about internal service ports.
@@ -392,7 +479,7 @@ This milestone closes the assignment's **"Testing & Validation"** section entire
 - [ ] Verify correct serialization/deserialization of `MoveRequest`/`GameState` between services
 
 **State Management**
-- [ ] Test: after a series of moves, the state in H2 (Engine) matches what Session sees and what is pushed to the UI via WebSocket
+- [ ] Test: after a series of moves, the state in H2 (Engine) matches what Session serves from `GET /sessions/{id}` and what it emits on the SSE stream
 - [ ] Test for state recovery on a repeated `GET /games/{id}` — data isn't "lost" between requests
 
 **Error Handling**
@@ -402,7 +489,8 @@ This milestone closes the assignment's **"Testing & Validation"** section entire
 
 **Integration Testing — full game loop**
 - [ ] `@SpringBootTest` scenario: create session → loop of automatic moves → get the final status (WIN/DRAW) — end to end, as close as possible to a real run
-- [ ] Verify that WebSocket messages actually arrive on every move (via a test STOMP client in the test)
+- [ ] Verify that an SSE event actually arrives for every move (subscribe to `/sessions/{id}/stream` in the test and collect events), and that the stream terminates on `COMPLETED`/`FAILED`
+- [ ] Verify the polling path independently: `GET /sessions/{id}` reflects each move and reaches a terminal status
 
 **Concurrency Handling (optional, but desirable)**
 - [ ] Test: two parallel `POST /games/{id}/move` on the same `gameId` — only one should be applied, the second should get a proper error (409), without corrupting the board state
@@ -474,7 +562,7 @@ This milestone closes the assignment's **"Testing & Validation"** section entire
 | Concurrency Handling (optional) | Milestone 7 |
 | Service Discovery / API Gateway (optional) | Milestones 2, 6 |
 | Data Persistence (optional) | Milestone 1 (H2, with a path to file mode) |
-| Real-Time Updates (optional) | Milestone 4 (WebSocket) |
+| Real-Time Updates (optional) | Milestone 5 (SSE); the required "live board" of line 59 is already met by Milestone 4's polling |
 | CI (build + test + quality) | Milestone 8 |
 | Kubernetes readiness (optional) | Milestone 11 |
 | Code Quality | Milestone 10 |
@@ -483,6 +571,7 @@ This milestone closes the assignment's **"Testing & Validation"** section entire
 | Discussion of improvements | Milestone 10 |
 
 ## Possible future improvements (outside current scope)
+- **WebSocket + STOMP instead of SSE** — the update channel was originally planned as a STOMP topic (`/topic/game/{sessionId}`) over SockJS. SSE was chosen instead because the traffic is strictly one-way, and SSE delivers that with a native browser API, no JS libraries, free reconnect and `Last-Event-ID` replay. WebSocket becomes the right call the moment the browser needs to *send* on the same channel — a pause/step/resume control, a human player taking over from the bot, or several clients coordinating. It would also win on fan-out: a STOMP broker multiplexes many subscriptions over one connection and handles broadcast itself, whereas the SSE publisher manages its own emitter registry. The swap is contained: a new `GameUpdatePublisher` implementation plus the one line that feeds `render(state)`
 - Replace random moves with Minimax
 - **Early draw detection** — detect a draw (theoretically) before the board is full, not only when it's full and no winner; for auto-play, a full-board check is currently sufficient
 - **Full reactive stack (WebFlux)** for Engine and Session — possible since `task.md` imposes no reactivity constraint; both services are blocking MVC today, and the Session→Engine call uses the synchronous `RestClient`
