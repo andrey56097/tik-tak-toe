@@ -18,6 +18,16 @@ public final class GameStateFactory {
     }
 
     /**
+     * The starting board, shared by every fresh game. Safe as a constant
+     * precisely because it is immutable at both levels — no caller can alter
+     * what the next caller sees.
+     */
+    private static final List<List<CellState>> EMPTY_BOARD = List.of(
+            List.of(CellState.EMPTY, CellState.EMPTY, CellState.EMPTY),
+            List.of(CellState.EMPTY, CellState.EMPTY, CellState.EMPTY),
+            List.of(CellState.EMPTY, CellState.EMPTY, CellState.EMPTY));
+
+    /**
      * The 3x3 empty board: {@link GameStatus#IN_PROGRESS}, X to move first,
      * no winner.
      *
@@ -25,10 +35,6 @@ public final class GameStateFactory {
      * @return the fresh empty {@link GameState}
      */
     public static GameState empty(String gameId) {
-        List<List<CellState>> board = List.of(
-                List.of(CellState.EMPTY, CellState.EMPTY, CellState.EMPTY),
-                List.of(CellState.EMPTY, CellState.EMPTY, CellState.EMPTY),
-                List.of(CellState.EMPTY, CellState.EMPTY, CellState.EMPTY));
-        return new GameState(gameId, board, GameStatus.IN_PROGRESS, CellState.X, null);
+        return new GameState(gameId, EMPTY_BOARD, GameStatus.IN_PROGRESS, CellState.X, null);
     }
 }
