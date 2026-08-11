@@ -100,6 +100,21 @@ class GameControllerIntegrationTest {
     }
 
     @Test
+    void makeMoveCreatesGameWhenIdWasNeverCreated() throws Exception {
+        String id = "never-created-" + java.util.UUID.randomUUID();
+        MoveRequest move = new MoveRequest(CellState.X, 1, 1);
+
+        mockMvc.perform(post("/games/{id}/move", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(move)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(id))
+                .andExpect(jsonPath("$.board[1][1]").value("X"))
+                .andExpect(jsonPath("$.nextTurn").value("O"))
+                .andExpect(jsonPath("$.status").value("IN_PROGRESS"));
+    }
+
+    @Test
     void makeMoveReturns400WhenPlayerIsMissing() throws Exception {
         String id = createGame();
         mockMvc.perform(post("/games/{id}/move", id)
