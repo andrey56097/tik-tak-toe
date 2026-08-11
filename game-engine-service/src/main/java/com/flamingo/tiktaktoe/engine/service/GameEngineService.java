@@ -100,7 +100,7 @@ public class GameEngineService {
 
     /**
      * Checks that a move can even be attempted right now: the game must still
-     * be in progress,   and it must be this player's turn.
+     * be in progress, and it must be this player's turn.
      */
     private void assertPlayable(GameEntity entity, MoveRequest move) {
         if (entity.getStatus() != GameStatus.IN_PROGRESS) {

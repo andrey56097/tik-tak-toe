@@ -23,12 +23,8 @@ import org.springframework.web.bind.annotation.RestController;
  * not here (SRP).
  *
  * <p>Responses are {@link SessionResponse}, never the store's own
- * {@code SessionRecord}. {@code CLAUDE.md}'s Spring &amp; Web Production
- * Standards name this explicitly: domain types and <em>store value types</em>
- * ({@code SessionRecord}, {@code MoveHistoryEntry}) must never appear in a REST
- * contract. The two shapes are identical today, which is exactly when the seam
- * is cheap to keep — the point is that the stored shape can change without
- * moving the published one.
+ * {@code SessionRecord} — see {@link SessionResponse} for why the two are kept
+ * apart.
  */
 @Tag(name = "Sessions", description = "Auto-play Tic-Tac-Toe session lifecycle: create, simulate, query")
 @RestController
