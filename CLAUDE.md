@@ -21,7 +21,7 @@ suggestions — they are the acceptance criteria for all implementation work.
 
 - **Strategy** — move logic (`MoveStrategy`, `RandomMoveStrategy`, later `MinimaxMoveStrategy`)
 - **Repository** — data access (`GameRepository extends JpaRepository`), so the DB can be swapped
-- **Adapter / Ports & Adapters** — wrap external clients (`GameEngineClient` wraps `WebClient`); swap transport without touching business logic
+- **Adapter / Ports & Adapters** — wrap external clients (`GameEngineClient` wraps `RestClient`); swap transport without touching business logic
 - **Observer / Pub-Sub** — WebSocket (STOMP topic) for pushing updates
 - **Factory / Builder** — create domain objects via static factories or builders, not long public constructors
 - **DTO** — keep JPA entities (`GameEntity`) separate from API models (`GameState`, `MoveRequest`); the DB schema must never leak through the REST contract
@@ -171,7 +171,7 @@ The system is a **distributed Tic Tac Toe** — five independent Spring Boot ser
 How the services talk:
 
 - Browser → **Gateway** (`:8080`), which routes by name (`lb://GAME-SESSION-SERVICE`, …) using Eureka addresses.
-- Session → Engine: **synchronous REST** via `WebClient` (`@LoadBalanced`).
+- Session → Engine: **synchronous REST** via `RestClient` (`@LoadBalanced`, connect+read timeouts). Never `WebClient` + `.block()` — see Spring & Web Production Standards.
 - Session → UI: **WebSocket** (STOMP + SockJS), topic `/topic/game/{id}`.
 - Engine → H2: Spring Data JPA (`jdbc:h2:mem:games;DB_CLOSE_DELAY=-1`).
 - Each REST service (Engine, Session) exposes its API docs via **springdoc-openapi** (`/v3/api-docs` + Swagger UI) — see Version gotchas.
@@ -183,8 +183,8 @@ Coordination pattern: **Orchestration** — `GameSessionOrchestrator` (Session) 
 Concrete class names from the plan — use these when implementing or reviewing:
 
 - **Engine:** `GameController` (HTTP) · `GameEngineService` (rules) · `GameEntity` + `GameRepository extends JpaRepository<GameEntity, String>` · `MoveValidator` · `WinnerChecker`.
-- **Session:** `GameSessionOrchestrator` · `MoveStrategy` (`RandomMoveStrategy` for v1, `MinimaxMoveStrategy` later) · `GameEngineClient` (`RestGameEngineClient`) · `GameUpdatePublisher` / `GameBroadcaster`.
-- **`common` module (DRY):** `GameState`, `MoveRequest`, `CellState`, `GameStatus` — shared by Engine and Session, never copy-pasted. `GameStatus` aligns with `task.md`: `IN_PROGRESS` / `WIN` / `DRAW` (+ `NEXT_TURN` to explicitly track whose turn). `GameState` carries a `winner` (X/O/null); `MoveRequest` carries `player` (X/O) + `row`/`col` — Engine validates the submitted `player` matches whose turn.
+- **Session:** `GameSessionOrchestrator` · `SessionSimulationRunner` (the `@Async` move loop) · `SessionStore` (`InMemorySessionStore`) · `MoveStrategy` (`RandomMoveStrategy` for v1, `MinimaxMoveStrategy` later) · `GameEngineClient` (`RestGameEngineClient`) · `GameUpdatePublisher`.
+- **`common` module (DRY):** `GameState`, `MoveRequest`, `CellState`, `GameStatus` — shared by Engine and Session, never copy-pasted. `GameStatus` is exactly `task.md`'s three values — `IN_PROGRESS` / `WIN` / `DRAW`; whose turn it is is **not** a status but a separate `GameState.nextTurn` field (X/O). `GameState` carries a `winner` (X/O/null); `MoveRequest` carries `player` (X/O) + `row`/`col` — Engine validates the submitted `player` matches whose turn.
 - **Concurrency:** write-time sync via `@Transactional` + optimistic locking (`@Version`), or `synchronized`/`ReentrantLock` per `gameId`. Two parallel moves on one game → one applied, the other gets 409.
 
 ## Version gotchas (verified Aug 2026 — see plan)
