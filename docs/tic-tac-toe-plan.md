@@ -13,7 +13,7 @@
 | Service Discovery | Netflix Eureka |
 | Game state storage (Engine) | **H2 (in-memory mode)** — via Spring Data JPA |
 | Session state storage (Session) | **In-memory** (`ConcurrentHashMap`) for session + move history (KISS); Engine remains the persistent source of game state |
-| Session ↔ Engine communication | REST via **reactive WebClient** (`@LoadBalanced`) on the Session→Engine boundary |
+| Session ↔ Engine communication | REST via **`RestClient`** (`@LoadBalanced`, connect+read timeouts) on the Session→Engine boundary |
 | Session → UI communication | WebSocket (STOMP + SockJS) |
 | Move strategy (v1) | Random move (simple implementation) |
 | Testing (unit) | JUnit 5 + Mockito |
@@ -76,7 +76,7 @@ This is a cross-cutting concern — not a separate milestone, but a requirement 
 | **O** — Open/Closed | Move strategy (`MoveStrategy`) and storage (`GameRepository`) are interfaces; to add minimax or Postgres, we don't touch existing code, we add a new implementation |
 | **L** — Liskov Substitution | Any `MoveStrategy` implementation (`RandomMoveStrategy`, `MinimaxMoveStrategy`) must be interchangeable without changing the behavior of the calling code (`GameSessionOrchestrator`) |
 | **I** — Interface Segregation | Not one "fat" `GameService`, but separate narrow interfaces: `MoveValidator`, `WinnerChecker`, `MoveStrategy` — a client depends only on what it actually uses |
-| **D** — Dependency Inversion | `GameSessionOrchestrator` depends on the `GameEngineClient` interface, not on concrete `WebClient` code; `GameEngineService` depends on the `GameRepository` interface, not on JPA directly |
+| **D** — Dependency Inversion | `GameSessionOrchestrator` depends on the `GameEngineClient` interface, not on concrete HTTP-client code; `GameEngineService` depends on the `GameRepository` interface, not on JPA directly |
 
 ### GoF design patterns — concrete application points
 
@@ -109,16 +109,15 @@ public interface GameRepository extends JpaRepository<GameEntity, String> {
 
 **Observer / Publish-Subscribe** — already effectively used in the WebSocket pairing (a STOMP topic is pub/sub): `GameBroadcaster` publishes an event, the UI is subscribed to the topic, unaware of the Session Service's existence directly.
 
-**Adapter** — `GameEngineClient` wraps `WebClient` behind its own interface:
+**Adapter** — `GameEngineClient` wraps the HTTP client behind its own interface:
 ```java
 public interface GameEngineClient {
-    Mono<GameState> createGame();
-    Mono<GameState> makeMove(String gameId, MoveRequest move);
+    GameState makeMove(String gameId, MoveRequest move);
 }
 
 @Component
 public class RestGameEngineClient implements GameEngineClient {
-    private final WebClient webClient;
+    private final RestClient restClient;
     // REST-based implementation
 }
 ```
@@ -204,7 +203,7 @@ sequenceDiagram
     participant DB as H2
     participant U as UI (WebSocket)
 
-    B->>GW: POST /api/sessions
+    B->>GW: POST /sessions
     GW->>S: proxy request
     S->>E: POST /sessions (Session initializes game in Engine)
     E->>DB: INSERT new game
@@ -236,7 +235,7 @@ Who does what (per `task.md`):
 
 | Component | Role in moves |
 |------|------|
-| **UI** | Displays the board in real time, triggers simulation (`Start Simulation` → `POST /api/sessions/{sessionId}/simulate`), shows status and move history. **Never generates moves.** |
+| **UI** | Displays the board in real time, triggers simulation (`Start Simulation` → `POST /sessions/{sessionId}/simulate`), shows status and move history. **Never generates moves.** |
 | **Game Session** | **Generates moves** (`decideMove()`, random strategy in v1) and orchestrates the auto-play loop. |
 | **Game Engine** | **Validates and applies** moves, detects winner/draw, owns persistence. |
 
@@ -247,13 +246,13 @@ So: **moves are made on the backend** — the Game Session decides the move, the
 ```
 [UI]                     [Session]                          [Engine]
  │                          │                                  │
- │  POST /api/sessions      │  creates session, returns id     │
+ │  POST /sessions      │  creates session, returns id     │
  │─────────────────────────>│                                  │
  │                          │  creates game in Engine (via     │
  │                          │  POST /sessions, M3)             │
  │                          │─────────────────────────────────>│
  │                          │  ── auto-play loop ──            │
- │  POST /api/sessions/{id} │                                  │
+ │  POST /sessions/{id} │                                  │
  │  /simulate               │  decideMove() (random)           │
  │─────────────────────────>│─────────────────────────────────>│
  │                          │  POST /games/{id}/move           │
@@ -264,8 +263,8 @@ So: **moves are made on the backend** — the Game Session decides the move, the
  │  board redraws           │  ... repeats until game ends ... │
 ```
 
-1. The user clicks **Start Simulation** in the UI → `POST /api/sessions` → Session creates a session and returns `sessionId`.
-2. The UI calls `POST /api/sessions/{id}/simulate` (or Session starts the loop itself).
+1. The user clicks **Start Simulation** in the UI → `POST /sessions` → Session creates a session and returns `sessionId`.
+2. The UI calls `POST /sessions/{id}/simulate` (or Session starts the loop itself).
 3. **Session** (`GameSessionOrchestrator`) runs the loop: `decideMove()` (picks a cell) → sends `POST /games/{id}/move` → **Engine** validates and applies the move, returns the new `GameState`.
 4. After every move Session **pushes the update over WebSocket** → UI redraws the board.
 5. Repeat until `IN_PROGRESS` → `WIN` / `DRAW`.
@@ -296,7 +295,7 @@ graph LR
 
 ## Stages and Milestones
 
-### Milestone 0 — Environment preparation
+### Milestone 0 — Environment preparation *(enabler — not a `task.md` item)*
 - [ ] Create the monorepo structure (5 service folders + 1 `common` folder)
 - [ ] `common` — shared module with DTOs (`GameState`, `MoveRequest`, `CellState`, `GameStatus`), pulled in as a dependency by Engine and Session (DRY, single data contract)
 - [ ] Configure `.gitignore` at the root
@@ -307,7 +306,7 @@ graph LR
 
 ---
 
-### Milestone 1 — Game Engine Service + H2
+### Milestone 1 — Game Engine Service + H2 *(**required** — `task.md` component 1)*
 - [ ] Dependencies: `spring-boot-starter-data-jpa`, `com.h2database:h2`
 - [ ] `application.yml`: `jdbc:h2:mem:games;DB_CLOSE_DELAY=-1`, enable H2 Console
 - [ ] Entity `GameEntity` (id, board as JSON/String, status, nextTurn) + `GameRepository extends JpaRepository<GameEntity, String>`
@@ -325,7 +324,7 @@ graph LR
 
 ---
 
-### Milestone 2 — Eureka Server + registration
+### Milestone 2 — Eureka Server + registration *(optional — `task.md` “Service Discovery / API Gateway”)*
 - [ ] Stand up the Eureka Server (`@EnableEurekaServer`, port 8761)
 - [ ] Add `eureka-client` to Game Engine, register under the name `GAME-ENGINE-SERVICE`
 - [ ] Verify in the console at `localhost:8761` that the service appears in the registry
@@ -334,17 +333,17 @@ graph LR
 
 ---
 
-### Milestone 3 — Game Session Service (orchestrator)
+### Milestone 3 — Game Session Service (orchestrator) *(**required** — `task.md` component 2)*
 - [ ] Add `eureka-client`, register as `GAME-SESSION-SERVICE`
-- [ ] `WebClient` with `@LoadBalanced` to call `GAME-ENGINE-SERVICE` by name
+- [ ] `RestClient` with `@LoadBalanced` to call `GAME-ENGINE-SERVICE` by name
 - [ ] `decideMove()` — pick a random free cell
 - [ ] Auto-play loop: create game → move → check status → repeat until the end
-- [ ] `POST /api/sessions` — start a new game session (generate `sessionId`, optionally initialize a game in Engine) and **return immediately** (non-blocking)
-- [ ] `POST /api/sessions/{sessionId}/simulate` — trigger the automated move simulation (alternating turns) until the game concludes
-- [ ] `GET /api/sessions/{sessionId}` — fetch session details, move history, and current game state
+- [ ] `POST /sessions` — start a new game session (generate `sessionId`, optionally initialize a game in Engine) and **return immediately** (non-blocking)
+- [ ] `POST /sessions/{sessionId}/simulate` — trigger the automated move simulation (alternating turns) until the game concludes
+- [ ] `GET /sessions/{sessionId}` — fetch session details, move history, and current game state
 - [ ] Session storage: in-memory (`ConcurrentHashMap`) for session + move history
 - [ ] Pause between moves (for UI visibility)
-- [ ] **Error handling / communication failures**: handle Game Engine unavailability (timeout, connection refused) — `onErrorResume`/try-catch around WebClient calls, logging, stop the session with a clear status instead of hanging
+- [ ] **Error handling / communication failures**: handle Game Engine unavailability (timeout, connection refused) — try-catch around the client calls, logging, stop the session with a clear status instead of hanging
 - [ ] Unit tests: `decideMove()` on different board states, handling an erroneous Engine response (mock the client)
 - [ ] Wire `springdoc-openapi` on Session → its own `/v3/api-docs` + `/swagger-ui.html`
 
@@ -352,7 +351,7 @@ graph LR
 
 ---
 
-### Milestone 4 — WebSocket wiring Session → UI
+### Milestone 4 — WebSocket wiring Session → UI *(optional — `task.md` “Real-Time Updates”; the UI requirement itself is satisfied by any live-updating board)*
 - [ ] Configure `@EnableWebSocketMessageBroker` in the Session Service
 - [ ] STOMP endpoint `/ws-game`, topic `/topic/game/{sessionId}`
 - [ ] Publish a state update after every move
@@ -361,21 +360,21 @@ graph LR
 
 ---
 
-### Milestone 5 — UI Service
+### Milestone 5 — UI Service *(**required** — `task.md` component 3)*
 - [ ] Add `eureka-client`, register as `UI-SERVICE`
 - [ ] Simple HTML/JS page with a 3×3 board
 - [ ] Connect via SockJS + STOMP to the Session Service
 - [ ] Render the board on receiving updates
-- [ ] "Start Simulation" button → create session (`POST /api/sessions`) → trigger `POST /api/sessions/{sessionId}/simulate`
+- [ ] "Start Simulation" button → create session (`POST /sessions`) → trigger `POST /sessions/{sessionId}/simulate`
 - [ ] Display live status (`IN_PROGRESS` / `WIN` / `DRAW`), a move-history log, and connection errors
 
 **Result:** you open the page, click "start", and watch the board fill itself in real time.
 
 ---
 
-### Milestone 6 — Gateway
+### Milestone 6 — Gateway *(optional — `task.md` “Service Discovery / API Gateway”)*
 - [ ] Stand up Spring Cloud Gateway (port 8080)
-- [ ] Route to `GAME-SESSION-SERVICE` (`/api/sessions/**`)
+- [ ] Route to `GAME-SESSION-SERVICE` (`/sessions/**`)
 - [ ] Route to `GAME-ENGINE-SERVICE` (`/games/**`) — optional, for direct access/debugging
 - [ ] Route to `UI-SERVICE` (`/**`, lowest priority)
 - [ ] Verify that the whole flow works through the single port `localhost:8080`
@@ -384,7 +383,7 @@ graph LR
 
 ---
 
-### Milestone 7 — Testing & Validation (a full block, separate from the unit tests written during development)
+### Milestone 7 — Testing & Validation (a full block, separate from the unit tests written during development) *(**required** — `task.md` “Testing & Validation”)*
 
 This milestone closes the assignment's **"Testing & Validation"** section entirely — item by item:
 
@@ -417,7 +416,7 @@ This milestone closes the assignment's **"Testing & Validation"** section entire
 
 ---
 
-### Milestone 8 — CI (Continuous Integration)
+### Milestone 8 — CI (Continuous Integration) *(beyond `task.md`)*
 - [ ] GitHub Actions workflow: on every push/PR — `./gradlew build` (compiles + runs tests) for each service
 - [ ] Run unit tests + mutation tests (Pitest) in CI; a failed check marks the PR red
 - [ ] Quality checks: `./gradlew check` (or lint/spotless if configured)
@@ -427,7 +426,7 @@ This milestone closes the assignment's **"Testing & Validation"** section entire
 
 ---
 
-### Milestone 9 — Docker + docker-compose
+### Milestone 9 — Docker + docker-compose *(beyond `task.md`)*
 - [ ] `Dockerfile` for each of the 5 services (one image per service)
 - [ ] `docker-compose.yml` at the root with all services, correct startup order (`depends_on`), and a shared network
 - [ ] Verify a full startup with a single command `docker-compose up` — containers are **isolated** (each in its own container) but **communicate over the shared compose network by service name** (e.g. `http://engine:8081`), not `localhost`
@@ -437,7 +436,7 @@ This milestone closes the assignment's **"Testing & Validation"** section entire
 
 ---
 
-### Milestone 10 — Final polish and Submission Guidelines
+### Milestone 10 — Final polish and Submission Guidelines *(**required** — `task.md` submission checklist)*
 - [ ] README.md: architecture, diagrams, run instructions (`docker-compose up`), test instructions (`./gradlew test`)
 - [ ] Code style check / comments in key places (validation, orchestration, error handling) — under "adheres to Spring Boot best practices"
 - [ ] A "Possible improvements / alternative approaches" section in the README (optional per the assignment, but easily covered with 5–6 items: minimax, message broker, persistent H2 instead of in-memory, multiple parallel game sessions, etc.)
@@ -468,8 +467,8 @@ This milestone closes the assignment's **"Testing & Validation"** section entire
 |------|------|
 | Inter-Service Communication | Milestone 3 (REST client) + Milestone 7 (tests) |
 | State Management | Milestone 1 (H2) + Milestone 7 (tests) |
-| Session Management | Milestone 3 (`POST /api/sessions`, `GET /api/sessions/{id}`, move history) |
-| Automated Move Simulation | Milestone 3 (`POST /api/sessions/{id}/simulate`) |
+| Session Management | Milestone 3 (`POST /sessions`, `GET /sessions/{id}`, move history) |
+| Automated Move Simulation | Milestone 3 (`POST /sessions/{id}/simulate`) |
 | Error Handling | Milestones 1, 3 (implementation) + Milestone 7 (tests) |
 | Integration Testing (full automated game flow) | Milestone 7 |
 | Concurrency Handling (optional) | Milestone 7 |
@@ -486,7 +485,7 @@ This milestone closes the assignment's **"Testing & Validation"** section entire
 ## Possible future improvements (outside current scope)
 - Replace random moves with Minimax
 - **Early draw detection** — detect a draw (theoretically) before the board is full, not only when it's full and no winner; for auto-play, a full-board check is currently sufficient
-- **Full reactive stack (WebFlux)** for Engine and Session — possible since `task.md` imposes no reactivity constraint; we currently use blocking MVC + reactive `WebClient` on the Session→Engine boundary
+- **Full reactive stack (WebFlux)** for Engine and Session — possible since `task.md` imposes no reactivity constraint; both services are blocking MVC today, and the Session→Engine call uses the synchronous `RestClient`
 - **Persist history in a DB** — track session/move history and win/loss outcomes (who won, who lost, over multiple games) instead of in-memory; extend the in-memory design when a durable record is needed
 - Message broker (Kafka/RabbitMQ) instead of synchronous REST between Session and Engine
 - H2 in persistent (file) mode instead of in-memory — state recovery after restart

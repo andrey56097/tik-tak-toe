@@ -311,20 +311,26 @@ All public routes are reachable through the gateway at `localhost:8080`.
 
 ## Roadmap
 
-| # | Milestone | Result |
-|------|------|------|
-| 0 | Environment & monorepo skeleton | 5 independent Spring Boot projects + `common` module |
-| 1 | **Game Engine Service + H2** | Rules, validation, error handling, persistence — fully tested |
-| 2 | Eureka Server + registration | Engine visible in the service registry |
-| 3 | **Game Session Service** | Orchestrator that plays a full game automatically |
-| 4 | WebSocket Session → UI | Real-time state updates |
-| 5 | UI Service | Browser page rendering the live board |
-| 6 | Gateway | Everything reachable through `localhost:8080` |
-| 7 | Testing & validation | Integration, error-handling, and concurrency suite |
-| 8 | CI (build + test + quality) | GitHub Actions on every push/PR: build, unit + mutation tests, quality checks |
-| 9 | Docker + docker-compose | Whole stack up with one command |
-| 10 | Final polish & submission | README, code style, end-to-end verification |
-| 11 | Kubernetes readiness (optional) | Manifests to deploy the stack to a cluster when needed |
+Ordered so each stage builds on the last. The **Scope** column says what the
+assignment actually demands: `task.md` names three required components and lists
+service discovery, an API gateway and real-time updates as *optional
+enhancements*. Optional stages are still built — they are ordered where they fit
+logically, not where their priority would put them.
+
+| # | Milestone | Scope | Result |
+|---|---|---|---|
+| 0 | Environment & monorepo skeleton | enabler | 5 independent Spring Boot projects + `common` module |
+| 1 | **Game Engine Service + H2** | **required** | Rules, validation, error handling, persistence — fully tested |
+| 2 | Eureka Server + registration | optional | Engine visible in the service registry |
+| 3 | **Game Session Service** | **required** | Orchestrator that plays a full game automatically |
+| 4 | WebSocket Session → UI | optional | Real-time state updates |
+| 5 | **UI Service** | **required** | Browser page rendering the live board |
+| 6 | Gateway | optional | Everything reachable through `localhost:8080` |
+| 7 | Testing & validation | **required** | Integration, error-handling, and concurrency suite |
+| 8 | CI (build + test + quality) | beyond scope | GitHub Actions on every push/PR: build, unit + mutation tests, quality checks |
+| 9 | Docker + docker-compose | beyond scope | Whole stack up with one command |
+| 10 | Final polish & submission | **required** | README, code style, end-to-end verification |
+| 11 | Kubernetes readiness | beyond scope | Manifests to deploy the stack to a cluster when needed |
 
 Full details — version decisions, design patterns, and the assignment-requirements matrix — live in **[docs/tic-tac-toe-plan.md](docs/tic-tac-toe-plan.md)**.
 
