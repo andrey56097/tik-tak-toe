@@ -52,6 +52,76 @@ This project treats persistence as swappable **by design**:
 
 ---
 
+## Spring & Web Production Standards (MANDATORY)
+
+These close the gap between "SOLID abstractions exist" and "this is a real Spring
+service". They apply to **every REST service in this repo**. Where an earlier
+milestone's code differs from a rule below, that earlier code is *debt* — fix it,
+don't copy it. (These were codified after a production-readiness audit of Milestone
+1/3; the audit's findings are the concrete violations these rules prevent.)
+
+### REST layer and DTOs
+
+- **Controllers are thin** — HTTP mapping only; all business logic lives in
+  services behind injected interfaces.
+- **Request/response bodies are DTOs, always.** Domain types, JPA entities, and
+  store value types (`GameEntity`, `SessionRecord`, `MoveHistoryEntry`) must never
+  appear in a REST contract. If a domain type would leak into the API, add a DTO
+  and map it in the controller/mapper.
+- **Every non-2xx response uses the shared `ErrorResponse` from `common`**
+  (`{timestamp, status, error, message, path}`) — never raw exception strings in
+  a body.
+- **Every `@RestControllerAdvice` has a catch-all `@ExceptionHandler(Exception.class)`**
+  that logs the throwable via SLF4J and returns a generic 500 `ErrorResponse`.
+  Never let Spring's default error body (which can expose internals) reach the client.
+- **Correct status codes**: 201 for create, 202 when accepted for background
+  processing, 400 invalid input, 404 unknown resource, 409 conflicting state.
+- **OpenAPI**: annotate every endpoint with `@Operation` + `@ApiResponse`
+  (springdoc is configured — the docs are part of the contract).
+
+### Service-to-service HTTP clients
+
+- In a Servlet/MVC service use **`RestClient`** (synchronous). Do **not** use
+  `WebClient` + `.block()` — that pulls the entire reactive stack into a blocking
+  service for no benefit.
+- Discovery: a `@LoadBalanced RestClient.Builder` resolves Eureka service ids.
+- **Timeouts are mandatory** (connect + read) on every outbound client — an
+  outbound call must never block indefinitely.
+- **Retries only for transient failures** — network/timeout/5xx. Explicitly
+  exclude 4xx client errors (`HttpClientErrorException`); retrying a 409/400 is a
+  bug, not resilience.
+- Log external call failures and retries via SLF4J.
+
+### Async and concurrency
+
+- **`@Async` lives on a dedicated bean** that callers inject and call. Never
+  self-invocation (`this.method()` bypasses the proxy) and never `@Autowired
+  setSelf(@Lazy ...)` self-injection. No exception.
+- Don't pace work with `Thread.sleep` inside an `@Async` pool worker when a
+  `TaskScheduler`/`ScheduledExecutorService` fits. If a sleep is genuinely
+  acceptable (e.g. a bounded simulation), keep the loop **bounded** and document it.
+- Loops that call external systems must have an **iteration cap** — a non-terminal
+  response must fail the loop, not hang it forever.
+- Concurrent writes: JPA entities use optimistic locking (`@Version`); two parallel
+  moves on one game → one applied, the other gets 409.
+
+### Persistence seam
+
+- State lives behind an interface (`GameRepository`, `SessionStore`), never as a
+  `Map` field in a service. An in-memory store is an *implementation* of the seam,
+  so a DB swap stays "new implementation + config, zero service changes".
+- Shared value-object factories (e.g. the empty board) live in `common`, not
+  copy-pasted per service.
+
+### Observability
+
+- Every service depends on `spring-boot-starter-actuator` and exposes
+  `health,info` — Eureka and operators rely on `/actuator/health`.
+- SLF4J where an operator needs to diagnose: 5xx, external failures, retries,
+  background-loop terminations. Not for routine 4xx already communicated by the response.
+
+---
+
 ## Testing Standards (MANDATORY)
 
 - **TDD:** test-first. No production code without a failing test first (see the `superpowers:test-driven-development` skill).

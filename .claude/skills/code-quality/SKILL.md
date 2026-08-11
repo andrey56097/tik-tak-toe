@@ -43,6 +43,21 @@ Operationalizes the code-quality standards from the project `CLAUDE.md`. Use thi
 - [ ] Domain exceptions + `@RestControllerAdvice` → proper HTTP statuses (400/404/409).
 - [ ] External failures handled (retry/log/degrade), never hang.
 
+### 6. Spring & web production standards
+
+- [ ] Controllers thin; request/response bodies are DTOs — no domain/entity/store types in the REST contract.
+- [ ] Non-2xx responses use the shared `ErrorResponse` (from `common`) — no raw strings in bodies.
+- [ ] Every `@RestControllerAdvice` has a catch-all `Exception` handler → SLF4J log + generic 500 `ErrorResponse`.
+- [ ] Status codes correct (201 create / 202 background-accept / 400 / 404 / 409).
+- [ ] Endpoints annotated with OpenAPI (`@Operation` / `@ApiResponse`).
+- [ ] Sync service-to-service via `RestClient` (no `WebClient`+`block`), `@LoadBalanced`, connect+read timeouts set.
+- [ ] Retries exclude 4xx (`HttpClientErrorException`); retry only transient (network / timeout / 5xx).
+- [ ] `@Async` on a dedicated injected bean — no self-invocation, no `@Autowired setSelf(@Lazy ...)`.
+- [ ] Loops that call external systems are bounded (iteration cap).
+- [ ] JPA entities use `@Version` optimistic locking; state behind an interface (`SessionStore` / `GameRepository`), not a service field.
+- [ ] Actuator (`health,info`) on every service.
+- [ ] Bean Validation on request DTOs (`@Valid` + jakarta annotations); ranges constrained (`@Min` / `@Max`).
+
 ## When done
 
 - [ ] All applicable checks pass.
