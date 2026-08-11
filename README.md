@@ -366,16 +366,28 @@ flowchart LR
 
 ## Possible Improvements
 
-Future work, deliberately outside the current scope (tracked in the plan):
+Future work, deliberately outside the current scope. The first group is
+**known gaps in what is built** — each is a real limitation, not a wish; the
+second is optional direction.
+
+### Known gaps
+
+- **Timeout recovery on Session → Engine.** A read timeout is retried, so a move Engine did apply can be submitted twice. Engine's turn check rejects the duplicate with a 409, so the board never corrupts — but the session ends `FAILED`. Turning that 409 into recovery (re-read the game, resume from Engine's state) closes it.
+- **Anyone can create games.** `POST /games/{gameId}/move` is an upsert, so any well-formed id materialises a game. That is what lets Session skip a separate create call, but it also means an unauthenticated caller can fill the store one id at a time. `task.md` specifies no authentication, so this waits for whatever auth arrives — or for a quota/eviction policy.
+- **Nothing is ever evicted.** `InMemorySessionStore` keeps every session for the life of the process, and Engine keeps every game.
+- **Session crash mid-simulation orphans the game.** The Engine-side game stays `IN_PROGRESS` with no one driving it.
+- **`MoveRequest` carries no `row`/`col` bounds annotations.** Out-of-range coordinates are rejected by `MoveValidator` with a 400, so the contract holds, but the error reads as "cell not playable" rather than naming the offending field.
+- **Load balancing and client timeouts are not proven against a live Engine.** Both are exercised against a mock HTTP endpoint; an end-to-end proof needs a running instance (planned with WireMock in the testing milestone).
+
+### Optional direction
 
 - **Minimax** move strategy instead of random (with alpha-beta pruning)
 - **Early draw detection** — detect a draw (theoretically) before the board is full; a full-board check is currently sufficient
-- **Full reactive stack (WebFlux)** for Engine and Session — `task.md` imposes no reactivity constraint; we currently use blocking MVC + reactive `WebClient` on the Session→Engine boundary
+- **Full reactive stack (WebFlux)** for Engine and Session — `task.md` imposes no reactivity constraint; both services are blocking MVC today, and the Session → Engine call uses the synchronous `RestClient`
 - **Message broker** (Kafka / RabbitMQ) instead of synchronous REST between Session and Engine
 - **Persistent H2** (file mode) for state recovery across restarts
 - **Persist history in a DB** — track session/move history and win/loss outcomes (who won/lost, over multiple games) instead of in-memory
-- **Multiple concurrent game sessions**
-- **Resilience**: built-in `@Retryable` (Spring Boot 4) on Session → Engine calls, Circuit Breaker via `resilience4j-spring-boot4` if needed
+- **Circuit breaker** via `resilience4j-spring-boot4` — retries are in place; a breaker would stop hammering an Engine that is down for longer
 - **Observability**: MDC logging with `gameId`/`sessionId` correlation
 - **Kubernetes deployment** — readiness manifests (Milestone 11) to deploy the stack to a cluster when needed
 

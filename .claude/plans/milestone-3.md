@@ -170,17 +170,8 @@ wiring classes only yield "return null instead of the bean" mutants, killable
 only by asserting a bean is non-null. The wiring is proven by
 `SessionAutoPlayIntegrationTest` booting the real context instead.
 
-## Deferred
+## Known gaps
 
-- **Engine adopts the shared contract** — it still returns plain-text error
-  bodies, and still builds its own starting board rather than
-  `GameStateFactory.empty` (which it cannot use as-is: the factory returns an
-  immutable board, Engine updates cells in place).
-- **Timeout recovery.** A read timeout is retried, so a move Engine did apply can
-  be submitted twice. Engine's turn check rejects the duplicate with a 409, so
-  the board stays correct — but the session ends `FAILED`. Turning that 409 into
-  recovery (re-read the game, resume from Engine's state) closes the gap.
-- **`MoveRequest` row/col bounds**, config profiles.
-- **Session eviction** — `InMemorySessionStore` keeps every session forever.
-- **Load-balancing and timeouts proven against a live Engine** (Milestone 7 /
-  WireMock).
+Tracked in the README's *Possible Improvements*, not duplicated here — the ones
+originating in this milestone are timeout recovery on the Session → Engine call
+and the absence of session eviction.
