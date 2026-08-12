@@ -58,11 +58,11 @@
 
 ## About
 
-This repository implements a **Tic Tac Toe**: the game is not a single monolith but a set of independent services — a *game engine* (rules & persistence), a *game session* (orchestrator that plays the game), and a *UI* — connected through service discovery (Eureka) and an **API gateway**, with real-time board updates over **WebSocket**.
+This repository implements a **Tic Tac Toe**: the game is not a single monolith but a set of independent services — a *game engine* (rules & persistence), a *game session* (orchestrator that plays the game), and a *UI* — connected through service discovery (Eureka) and an **API gateway**, with the board updating live in the browser as the services play.
 
 The assignment is treated as a production-grade distributed system: layered services, design patterns (Strategy, Repository, Adapter, DTO), proper error handling, and a comprehensive test suite — unit, integration, and concurrency.
 
-> **Status:** 🔨 in development. Built and tested so far: the **Game Engine** (rules, H2, upsert move endpoint), the **Game Session** orchestrator (auto-play, retries, timeouts), **Eureka** registration, and the shared `common` contract. Not built yet: WebSocket push, UI, gateway, Docker. The feature table below describes the target system; the [Roadmap](#roadmap) marks what each milestone closes and which are optional per `task.md`.
+> **Status:** 🔨 in development, and **all three components `task.md` requires now exist and play together** — the **Game Engine** (rules, H2, upsert move endpoint), the **Game Session** orchestrator (auto-play, retries, timeouts) and the **UI** (a board that fills itself in the browser), plus **Eureka** registration and the shared `common` contract. The browser currently keeps itself current by polling `GET /sessions/{id}`; Milestone 5 replaces that with an SSE push channel. Not built yet: SSE push, gateway, Docker. The feature table below describes the target system; the [Roadmap](#roadmap) marks what each milestone closes and which are optional per `task.md`.
 >
 > **Requirements source:** the assignment is authoritative in [docs/task.md](docs/task.md) (the home assignment). The implementation plan is built on it and tracks it item-by-item.
 
@@ -74,7 +74,7 @@ The assignment is treated as a production-grade distributed system: layered serv
 |------|------|
 | 🤖 **Self-playing game** | The session orchestrator picks a move (random strategy for v1), submits it, and repeats until the game ends. |
 | 🏗️ **Microservice architecture** | Game engine, session orchestrator, UI, service discovery, and gateway as independent deployable units. |
-| ⚡ **Real-time updates** *(planned)* | Board state is pushed to the browser over WebSocket (STOMP + SockJS). |
+| ⚡ **Live board** | The page redraws from full session state as each move lands — by polling today, pushed over **SSE** from Milestone 5. The renderer never sees the difference. |
 | 🗺️ **Service discovery & routing** | Netflix Eureka registers services today; Spring Cloud Gateway becomes the single entry point (`:8080`) in Milestone 6. |
 | 🗄️ **Persistent-by-design state** | H2 in-memory DB behind a real JPA repository — one line away from file-based persistence. |
 | 🐳 **Dockerized** *(planned)* | The whole stack starts with a single `docker-compose up` — isolated containers communicating over the compose network by service name. |
@@ -91,7 +91,7 @@ The assignment is treated as a production-grade distributed system: layered serv
 | **Framework** | [Spring Boot 4.1.x](https://spring.io/projects/spring-boot) |
 | **Cloud** | [Spring Cloud 2025.1.2 "Oakwood"](https://spring.io/projects/spring-cloud) — Eureka, Gateway |
 | **Data** | Spring Data JPA + [H2](https://www.h2database.com/) (in-memory) |
-| **Realtime** | WebSocket / STOMP / SockJS |
+| **Realtime** | Browser polling today → **Server-Sent Events** (native `EventSource`, no JS libraries) from Milestone 5 |
 | **HTTP Client** | Spring `RestClient` (synchronous, `@LoadBalanced`, connect + read timeouts) |
 | **Build** | Gradle 9.x (wrapper) + Kotlin DSL |
 | **Testing** | JUnit 5, Mockito, WireMock, Testcontainers *(optional)* |
@@ -125,7 +125,7 @@ flowchart TB
     Gateway -->|lb://GAME-ENGINE-SERVICE| Engine
 
     Session -->|REST · RestClient| Engine
-    Session -.->|WebSocket · STOMP| UI
+    Browser -.->|"poll GET /sessions/{id}<br/>SSE stream from M5"| Session
 
     UI -.->|register| Eureka
     Session -.->|register| Eureka
@@ -137,7 +137,7 @@ flowchart TB
 
 1. The **browser** talks only to the **gateway** (`:8080`) — it never knows internal service ports.
 2. The gateway routes requests **by service name** (`lb://GAME-SESSION-SERVICE`, …) using addresses it discovers from **Eureka**.
-3. The **Game Session Service** orchestrates a whole game: it calls its own move strategy and submits each move over **REST** (the move endpoint creates the game on first use), and after every move pushes the fresh board to the UI over **WebSocket**.
+3. The **Game Session Service** orchestrates a whole game: it calls its own move strategy and submits each move over **REST** (the move endpoint creates the game on first use), recording the fresh board after each one. The **UI service serves only the static page** — the board in the browser reads state from Session directly, by polling today and over an **SSE** stream from Milestone 5.
 4. The **Game Engine Service** owns the rules: move validation, winner detection, and persistence to **H2**.
 
 > A full game-cycle sequence diagram is in the [implementation plan](docs/tic-tac-toe-plan.md#one-game-cycle-sequence).
@@ -148,7 +148,7 @@ flowchart TB
 - **Layered Architecture** inside each service (Controller → Service → Repository).
 - **API Gateway + Service Discovery** — single entry point routing by service name via Eureka.
 - **Ports & Adapters (partially)** — business logic depends on interfaces (`GameRepository`, `MoveStrategy`, `GameEngineClient`); concrete adapters are plugged in via DI.
-- **Publish-Subscribe / Observer** — WebSocket (STOMP topic): Session publishes updates, UI subscribes.
+- **Publish-Subscribe / Observer** — `GameUpdatePublisher` (Milestone 5): Session publishes a state update, subscribed browsers receive it over SSE, and neither knows the other directly. Until then the browser polls, which needs no publisher at all.
 - **DTO pattern** — JPA entities stay separate from API models.
 
 ---
@@ -174,7 +174,8 @@ POST /sessions  ──▶  session starts  ──▶  Game Session creates a gam
    browser watches              loop:  decideMove() → POST /games/{id}/move
        ▲                              │
        │                              ▼
-  WebSocket push ◀──────  new GameState after every move
+  full session state ◀──────  new GameState after every move
+  (polled today, pushed over SSE from Milestone 5)
        │
        ▼
   Board redraws until status ∈ {IN_PROGRESS, WIN, DRAW}
@@ -184,7 +185,7 @@ POST /sessions  ──▶  session starts  ──▶  Game Session creates a gam
 
 ## Getting Started
 
-> **Note:** each service is started on its own port for now — Eureka `8761`, Engine `8081`, Session `8082`. Once Milestone 9 lands, the whole stack starts with `docker-compose up` — see [Roadmap](#roadmap).
+> **Note:** each service is started on its own port for now — Eureka `8761`, Engine `8081`, Session `8082`, UI `8083`. Once Milestone 9 lands, the whole stack starts with `docker-compose up` — see [Roadmap](#roadmap).
 
 ### Prerequisites
 
@@ -207,24 +208,41 @@ java -version        # → 21+
 ./gradlew build
 ```
 
-Compiles, runs the tests, and produces the executable jar in `build/libs/`.
+Compiles and tests every module and produces one executable jar per service, in
+that service's own `build/libs/` — e.g. `game-engine-service/build/libs/`. There
+is no jar at the repository root: the root is a Gradle settings file that
+aggregates the modules, not an application.
 
 ### Run
 
-**Option A — Gradle (development):**
+These are independent Spring Boot applications with no shared root project, so
+there is no single "start the app" command. Start them in this order — Eureka
+first, so the others have a registry to register with — each in its **own
+terminal**, because every one of these commands blocks:
 
 ```bash
-./gradlew bootRun
+./gradlew :eureka-server:bootRun          # :8761  service registry
+./gradlew :game-engine-service:bootRun    # :8081  rules + H2
+./gradlew :game-session-service:bootRun   # :8082  orchestrator
+./gradlew :ui-service:bootRun             # :8083  the board page
 ```
 
-**Option B — executable jar (production-like):**
+Then open **<http://localhost:8083>** and press *Start Simulation*.
+
+> **Do not run `./gradlew bootRun` from the repository root.** The task exists in
+> every module, so Gradle would try to start all four inside one build and block
+> on the first — the rest never start.
+
+Give Eureka a few seconds before the others: a service that starts while the
+registry is still coming up retries on its own, but the first attempt will fail
+in the log.
+
+**Executable jars** — same idea, one per service:
 
 ```bash
-./gradlew bootJar
-java -jar build/libs/tik-tak-toe-0.0.1-SNAPSHOT.jar
+./gradlew :game-engine-service:bootJar
+java -jar game-engine-service/build/libs/game-engine-service-0.0.1-SNAPSHOT.jar
 ```
-
-The application starts on **`http://localhost:8080`**.
 
 ### Test
 
@@ -232,20 +250,22 @@ The application starts on **`http://localhost:8080`**.
 ./gradlew test
 ```
 
-The human-readable test report opens from:
+Each module writes its own human-readable report:
 
 ```bash
-open build/reports/tests/test/index.html
+open game-engine-service/build/reports/tests/test/index.html
 ```
+
+To run one module's suite alone, name it — `./gradlew :game-engine-service:test`.
 
 ### Gradle task reference
 
 | Task | Description |
 |------|------|
-| `./gradlew build` | Full build — compile + test + package |
-| `./gradlew test` | Run the test suite |
-| `./gradlew bootRun` | Start the application |
-| `./gradlew bootJar` | Package an executable jar |
+| `./gradlew build` | Full build of every module — compile + test + package (also runs Pitest for the session service, so it takes a while) |
+| `./gradlew test` | Run every module's test suite |
+| `./gradlew :<module>:bootRun` | Start one service — e.g. `:ui-service:bootRun`. There is no root-level `bootRun`; see [Run](#run) |
+| `./gradlew :<module>:bootJar` | Package one service as an executable jar |
 | `./gradlew clean` | Delete all build outputs |
 
 ---
@@ -283,36 +303,55 @@ tik-tak-toe/
 ├── eureka-server/           # Service discovery                        :8761
 ├── gateway/                 # Spring Cloud Gateway — single entry point :8080
 ├── game-engine-service/     # Game rules, validation, H2 persistence   :8081
-├── game-session-service/    # Orchestrator: auto-play loop + WebSocket :8082
-└── ui-service/              # HTML/JS board, STOMP/SockJS client       :8083
+├── game-session-service/    # Orchestrator: auto-play loop            :8082
+└── ui-service/              # Serves the static HTML/CSS/JS board      :8083
 ```
 
 ---
 
 ## API Surface
 
-> Engine and Session are live; the **Status** column marks what is not built yet. No `/api` prefix anywhere — `task.md` names the paths directly and Milestone 1 settled on matching it.
+> All three services are live; the **Status** column marks what is not built yet.
+> The **Source** column separates the endpoints `task.md` names — five, and they
+> match it path for path — from the ones this implementation adds. No `/api`
+> prefix anywhere: the assignment names the paths directly and Milestone 1
+> settled on matching it.
 
-| Method | Path | Service | Description | Milestone | Status |
-|---|---|---|---|---|---|
-| `POST` | `/games/{gameId}/move` | Engine | Submit a move; creates the game if the id is unknown | 1 | live |
-| `GET` | `/games/{gameId}` | Engine | Fetch current game state | 1 | live |
-| `POST` | `/sessions` | Session | Create a new session (returns immediately) | 3 | live |
-| `POST` | `/sessions/{sessionId}/simulate` | Session | Trigger automated move simulation | 3 | live |
-| `GET` | `/sessions/{sessionId}` | Session | Session details, move history, current state | 3 | live |
-| `GET` | `/actuator/health` | Engine, Session | Liveness for Eureka and operators | 1, 3 | live |
-| `WS` | `/ws-game`, topic `/topic/game/{sessionId}` | Session | Open a STOMP connection and subscribe to live updates | 4 | planned |
-| `GET` | `/` | UI | Play in the browser | 5 | planned |
+| Method | Path | Service | Description | Success | Errors | Source | Status |
+|---|---|---|---|---|---|---|---|
+| `POST` | `/games/{gameId}/move` | Engine | Submit a move; creates the game if the id is unknown | `200` | `400` `409` | `task.md` | live · M1 |
+| `GET` | `/games/{gameId}` | Engine | Fetch current board state and status | `200` | `404` | `task.md` | live · M1 |
+| `POST` | `/sessions` | Session | Create a session; the id doubles as the `gameId` | `201` | — | `task.md` | live · M3 |
+| `POST` | `/sessions/{sessionId}/simulate` | Session | Start the simulation; returns at once, the game runs in the background | `202` | `404` `409` | `task.md` | live · M3 |
+| `GET` | `/sessions/{sessionId}` | Session | Session details, move history, current game state | `200` | `404` | `task.md` | live · M3 |
+| `GET` | `/` | UI | The board page | `200` | — | added | live · M4 |
+| `GET` | `/actuator/health` | Engine, Session, UI | Liveness for Eureka and operators | `200` | — | added | live |
+| `GET` | `/v3/api-docs`, `/swagger-ui.html` | Engine, Session | OpenAPI spec and Swagger UI, generated from the code | `200` | — | added | live |
+| `GET` | `/sessions/{sessionId}/stream` | Session | Subscribe to live state updates (`text/event-stream`) | `200` | `404` | added | planned · M5 |
 
-`/ws-game` is not a REST route: it is the WebSocket handshake URL. A client
-connects there once, then subscribes to `/topic/game/{sessionId}` over that
-single connection.
+Every error body is the shared `ErrorResponse` — `{timestamp, status, error,
+message, path}` — from the `common` module, never a raw exception string.
+
+The stream is the only endpoint beyond the five the assignment names, and it is
+a deliberate addition: any push mechanism needs something to connect to, and a
+stream and a snapshot want different timeouts, buffering and caching than
+`GET /sessions/{id}` does. The reasoning is in the
+[plan](docs/tic-tac-toe-plan.md).
+
+> **Known defect (fix in Milestone 5):** Engine answers `500` where it owes
+> `400` (a body Jackson cannot bind — an unknown player symbol, a missing field,
+> malformed JSON), `404` (an unmapped path) or `405` (a wrong method).
+> `GameExceptionHandler` lacks handlers for `HttpMessageNotReadableException`,
+> `NoResourceFoundException` and `HttpRequestMethodNotSupportedException`, so all
+> three fall into its catch-all. Session already handles the latter two
+> correctly. Valid-but-illegal moves and unknown game ids are unaffected — those
+> return `400` and `404` today.
 
 Once the gateway lands (Milestone 6), all public routes will be reachable
 through `localhost:8080`. Until then each service is called on its own port —
-Engine `8081`, Session `8082`.
+Engine `8081`, Session `8082`, UI `8083`.
 
-**API docs:** each REST service (Engine, Session) exposes its OpenAPI spec and Swagger UI via **springdoc-openapi** — see `/v3/api-docs` and `/swagger-ui.html` on the service's port.
+**API docs** are generated from the code by **springdoc-openapi**, so they cannot drift from the contract — kept per service (KISS) rather than aggregated at the gateway.
 
 ---
 
@@ -330,8 +369,8 @@ logically, not where their priority would put them.
 | 1 | **Game Engine Service + H2** | **required** | Rules, validation, error handling, persistence — fully tested |
 | 2 | Eureka Server + registration | optional | Engine visible in the service registry |
 | 3 | **Game Session Service** | **required** | Orchestrator that plays a full game automatically |
-| 4 | WebSocket Session → UI | optional | Real-time state updates |
-| 5 | **UI Service** | **required** | Browser page rendering the live board |
+| 4 | **UI Service** | **required** | Browser page rendering the live board, kept current by polling |
+| 5 | SSE push Session → UI | optional | The board updates the instant a move lands, with no polling traffic |
 | 6 | Gateway | optional | Everything reachable through `localhost:8080` |
 | 7 | Testing & validation | **required** | Integration, error-handling, and concurrency suite |
 | 8 | CI (build + test + quality) | beyond scope | GitHub Actions on every push/PR: build, unit + mutation tests, quality checks |
@@ -370,7 +409,8 @@ flowchart LR
 ## Git Workflow
 
 - `main` is always stable and runnable.
-- **Code and test work happens on a separate branch** — never commit code or tests directly to `main`. Milestones use `milestone/<number>-<short-name>` (e.g. `milestone/2-game-logic`); other code work uses `feature/<name>`, `fix/<name>`, `chore/<name>`. **Docs and rule changes go straight to `main`.**
+- **Code and test work happens on a separate branch** — never commit code or tests directly to `main`. Milestones use `milestone-<number>` (e.g. `milestone-4`) — no slash, the number is enough; other code work uses `feature/<name>`, `fix/<name>`, `chore/<name>`. **Docs and rule changes go straight to `main`.**
+- **Commit and PR titles start with `[MILESTONE-<n>]`**, so the stage is clear at a glance.
 - **Code and its tests live on the same branch**, committed together (atomic commits).
 - **Code review is mandatory before merge** — a reviewer pass gates merging into `main`.
 - Commits are **atomic** — one logical step per commit, with a meaningful message.
@@ -391,6 +431,7 @@ second is optional direction.
 - **Session crash mid-simulation orphans the game.** The Engine-side game stays `IN_PROGRESS` with no one driving it.
 - **`MoveRequest` carries no `row`/`col` bounds annotations.** Out-of-range coordinates are rejected by `MoveValidator` with a 400, so the contract holds, but the error reads as "cell not playable" rather than naming the offending field.
 - **Load balancing and client timeouts are not proven against a live Engine.** Both are exercised against a mock HTTP endpoint; an end-to-end proof needs a running instance (planned with WireMock in the testing milestone).
+- **The browser code has no tests.** `app.js` — the update loop, `render(state)`, the error-body mapping — and the board's layout rules are covered by nothing; `StaticPageTest` only proves the files are served and carry the ids the script drives. A real defect (marks jumping between grid rows, the glyph outgrowing its cell at large font sizes) was found by driving a browser by hand, not by the suite. Playwright is the agreed direction, deferred to the testing milestone.
 
 ### Optional direction
 
