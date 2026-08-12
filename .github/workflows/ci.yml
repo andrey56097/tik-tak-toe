@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One in-flight run per ref. Superseded PR runs are cancelled; runs on main are
+# not, so every commit that lands keeps its own verdict.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # The job id is the branch-protection context name. Renaming it silently
+  # breaks the merge gate — see docs/milestone-8-ci-plan.md.
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      # `build` implies `check`; `check` depends on `pitest` in both the engine
+      # and the session module, and on `jacocoTestCoverageVerification` in the
+      # engine. One command is the whole gate: compile, test, coverage floor,
+      # mutation floor, package. `--continue` so one broken module does not hide
+      # the state of the other five.
+      - name: Build, test and verify every module
+        run: ./gradlew build --continue --console=plain --stacktrace
+
+      - name: Upload reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          # run_id is stable across re-runs, and the upload refuses a duplicate
+          # name — without overwrite, re-running a red build loses its reports.
+          name: reports-${{ github.run_id }}
+          overwrite: true
+          path: |
+            **/build/reports/tests/test
+            **/build/reports/jacoco
+            **/build/reports/pitest
+            **/build/test-results/test
+          retention-days: 7
+          if-no-files-found: ignore
