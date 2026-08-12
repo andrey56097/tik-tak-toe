@@ -4,6 +4,8 @@
 
 **A self-playing, microservice-based Tic Tac Toe game** — the board fills itself in real time while a service orchestrator plays random moves against the game engine.
 
+[![CI](https://github.com/andrey56097/tik-tak-toe/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/andrey56097/tik-tak-toe/actions/workflows/ci.yml)
+
 ![Java](https://img.shields.io/badge/Java-21-%23E34F26?style=for-the-badge&logo=openjdk&logoColor=white)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-%236DB33F?style=for-the-badge&logo=spring&logoColor=white)
 ![Spring Cloud](https://img.shields.io/badge/Spring%20Cloud-2025.1.2-%236DB33F?style=for-the-badge&logo=spring&logoColor=white)
@@ -50,6 +52,7 @@
 - [API Surface](#api-surface)
 - [Roadmap](#roadmap)
 - [Testing Strategy](#testing-strategy)
+- [Continuous Integration](#continuous-integration)
 - [Git Workflow](#git-workflow)
 - [Possible Improvements](#possible-improvements)
 - [License](#license)
@@ -258,6 +261,11 @@ open game-engine-service/build/reports/tests/test/index.html
 
 To run one module's suite alone, name it — `./gradlew :game-engine-service:test`.
 
+> **Stop the stack before running the full build.** `EurekaServerApplicationTest`
+> starts the Eureka server on its real port (`DEFINED_PORT`, 8761), so
+> `./gradlew build` fails with `PortInUseException` while the services are
+> running locally. CI runs on a clean machine and is unaffected.
+
 ### Gradle task reference
 
 | Task | Description |
@@ -403,6 +411,30 @@ flowchart LR
 
     Unit --> Integration --> Concurrency
 ```
+
+---
+
+## Continuous Integration
+
+Every pull request to `main` and every push to `main` runs
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) — a single job that
+executes `./gradlew build` from the repository root on Temurin 21.
+
+One command is the entire gate, because the root build already implies it:
+
+| Layer | Where it comes from | Threshold |
+|---|---|---|
+| Compile + unit/integration tests | `build` → `check` → `test`, every module | all green |
+| Line coverage | `jacocoTestCoverageVerification`, `game-engine-service` | 80% |
+| Mutation score | `pitest`, `game-engine-service` and `game-session-service` | 80% |
+
+When a run fails, the test, JaCoCo and Pitest reports are attached to it as a
+`reports-<run_id>` artifact — the surviving mutants are readable there, which
+the step log does not show. Successful runs upload nothing.
+
+`main` is protected: `build` is a required status check, a branch must be up to
+date with `main` before merging, and the rule is not enforced for admins so that
+docs-only commits can still go straight to `main`.
 
 ---
 
