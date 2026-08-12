@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tic Tac Toe</title>
+    <link rel="stylesheet" href="app.css">
+</head>
+<body>
+<main>
+    <h1>Tic Tac Toe</h1>
+    <p class="subtitle">Two services play each other. Press start and watch.</p>
+
+    <button id="start" type="button">Start Simulation</button>
+
+    <!-- Hidden until something goes wrong; see showError in app.js. -->
+    <p id="error" class="error" hidden></p>
+
+    <p id="status" class="status">Not started</p>
+
+    <!-- Board and transcript are the same fact told twice — the position now,
+         and how it was reached — so they sit side by side and are read
+         together. They stack on narrow screens; see .stage in app.css. -->
+    <div class="stage">
+        <!-- Nine cells, filled in by render(). Order is row-major. -->
+        <div id="board" class="board"></div>
+
+        <section class="moves">
+            <h2>Move history</h2>
+            <ol id="history" class="history"></ol>
+        </section>
+    </div>
+
+    <!-- Carries text from the start so the rule above it never hangs over an
+         empty line, and so nothing shifts when the first session is created. -->
+    <p id="session" class="session">No session yet</p>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
