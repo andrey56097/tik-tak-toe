@@ -20,6 +20,11 @@ repositories {
 
 dependencies {
     implementation("org.springframework.cloud:spring-cloud-starter-gateway-server-webflux")
+    // Resolves the lb:// service ids the routes target. Also the only source of
+    // spring-cloud-loadbalancer, without which lb:// is never rewritten at all.
+    implementation("org.springframework.cloud:spring-cloud-starter-netflix-eureka-client")
+    // Required of every service by CLAUDE.md; Eureka reads /actuator/health.
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
