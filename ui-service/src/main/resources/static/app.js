@@ -56,13 +56,17 @@ function drawBoard(board) {
 }
 
 /**
- * Wording for the wire values. The enum names are the API's vocabulary, not the
- * reader's — WIN is reported as which player won, because that is the thing a
- * spectator actually wants to know.
+ * Wording for the wire values.
+ *
+ * The status itself always leads the line, because the assignment asks for the
+ * current game status to be shown and it has to be findable at a glance. What
+ * follows the dash is the detail a spectator actually wants — which player won —
+ * and never a replacement for the status word: "X wins" alone reports the
+ * outcome but hides which of the three states the game is in.
  */
 const GAME_STATUS_LABELS = {
     IN_PROGRESS: 'In progress',
-    DRAW: 'Draw — nobody wins',
+    DRAW: 'Draw — nobody won the game',
 };
 
 /**
@@ -82,7 +86,7 @@ function describeStatus(session) {
     }
     const { status, winner } = session.gameState;
     if (status === 'WIN') {
-        return `${winner} wins`;
+        return `Win — ${winner} won the game`;
     }
     return GAME_STATUS_LABELS[status] || status;
 }
