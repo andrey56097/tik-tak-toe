@@ -1,0 +1,58 @@
+spring:
+  application:
+    name: gateway
+  cloud:
+    gateway:
+      server:
+        webflux:
+          httpclient:
+            # Unset by default, which would let a hung service hold a gateway
+            # connection forever. Everything routed here is short — a session
+            # snapshot, or a simulate call that returns 202 immediately — with
+            # one exception, the SSE stream, which raises the response timeout
+            # on its own route.
+            connect-timeout: 2000
+            response-timeout: 5s
+
+          routes:
+            # Declared before the general session route so it wins the match.
+            # It exists to carry one setting the others must not have: the SSE
+            # stream stays open for the whole game, far longer than the global
+            # response timeout that every other request is held to.
+            - id: session-stream
+              uri: lb://GAME-SESSION-SERVICE
+              predicates:
+                - Path=/sessions/*/stream
+              metadata:
+                # Just above the emitter's own 120s (session.stream.timeout-ms),
+                # so the emitter always closes first and this is only ever
+                # reached by a session service that hangs without closing.
+                response-timeout: 125000
+
+            - id: sessions
+              uri: lb://GAME-SESSION-SERVICE
+              predicates:
+                - Path=/sessions/**
+
+            # Catch-all, and therefore always last: it accepts every path, so
+            # any route declared below it would never be reached.
+            - id: ui
+              uri: lb://UI-SERVICE
+              predicates:
+                - Path=/**
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+  instance:
+    lease-renewal-interval-in-seconds: 5
