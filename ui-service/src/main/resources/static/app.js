@@ -1,9 +1,11 @@
 'use strict';
 
-// Base URL of the session service. Milestone 6 puts everything behind the
-// Gateway on one port; setting this to '' makes every request relative, i.e.
-// same-origin, and is the only change this file needs then.
-const API_BASE = 'http://localhost:8082';
+// Empty on purpose: every request below is relative, so it goes to whatever
+// origin served this page — the Gateway on :8080. The page therefore knows no
+// internal service ports, and because page and API are same-origin, no CORS is
+// involved at all. Opening ui-service directly on :8083 is not supported: the
+// page would load and then look for the API on :8083, which does not serve it.
+const API_BASE = '';
 
 const BOARD_SIZE = 3;
 
