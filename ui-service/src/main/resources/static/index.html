@@ -18,6 +18,14 @@
 
     <p id="status" class="status">Not started</p>
 
+    <!-- Hidden until the SSE connection drops and the browser is retrying.
+         Clears itself on the next received event. A quiet notice rather than
+         the red error banner: EventSource reconnects on its own and fires
+         onerror on every drop, including ones it recovers from immediately,
+         so routing every one into the error banner would flash alarm on a
+         hiccup. -->
+    <p id="connection" class="connection" hidden></p>
+
     <!-- Board and transcript are the same fact told twice — the position now,
          and how it was reached — so they sit side by side and are read
          together. They stack on narrow screens; see .stage in app.css. -->

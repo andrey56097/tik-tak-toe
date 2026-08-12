@@ -1,18 +1,22 @@
 package com.flamingo.tiktaktoe.session.controller;
 
+import com.flamingo.tiktaktoe.session.domain.SessionRecord;
 import com.flamingo.tiktaktoe.session.dto.SessionResponse;
 import com.flamingo.tiktaktoe.session.orchestrator.GameSessionOrchestrator;
+import com.flamingo.tiktaktoe.session.publisher.GameUpdatePublisher;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
  * HTTP entry point for the auto-play session workflow, per {@code task.md}
@@ -32,9 +36,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class SessionController {
 
     private final GameSessionOrchestrator orchestrator;
+    private final GameUpdatePublisher publisher;
 
-    public SessionController(GameSessionOrchestrator orchestrator) {
+    public SessionController(GameSessionOrchestrator orchestrator, GameUpdatePublisher publisher) {
         this.orchestrator = orchestrator;
+        this.publisher = publisher;
     }
 
     /**
@@ -99,5 +105,27 @@ public class SessionController {
     @GetMapping("/{sessionId}")
     public SessionResponse getSession(@PathVariable String sessionId) {
         return SessionResponse.from(orchestrator.getSession(sessionId));
+    }
+
+    /**
+     * Opens an SSE stream for a session: pushes the current state immediately,
+     * then an event after every move, and a {@code done} event when the game
+     * ends. Unknown session id → 404 {@link
+     * com.flamingo.tiktaktoe.common.ErrorResponse} from the existing handler,
+     * same as every other endpoint.
+     *
+     * @param sessionId the session to stream
+     * @return an {@link SseEmitter} that the framework holds open
+     */
+    @Operation(summary = "Subscribe to a session's SSE update stream",
+            description = "Returns text/event-stream; sends current state, then one event per move, then a 'done' event.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Stream opened; events arrive as the game plays"),
+            @ApiResponse(responseCode = "404", description = "No session with the given id exists")
+    })
+    @GetMapping(value = "/{sessionId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter stream(@PathVariable String sessionId) {
+        SessionRecord record = orchestrator.getSession(sessionId);
+        return publisher.subscribe(sessionId, record);
     }
 }

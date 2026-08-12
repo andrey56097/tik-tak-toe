@@ -24,6 +24,10 @@ eureka:
 session:
   simulation:
     move-delay-ms: 1000
+  stream:
+    # 2 min is comfortably above the worst-case game: 9 moves × 1s delay
+    # + 9 Engine round-trips + @Retryable's 3 attempts at 5s read timeout each.
+    timeout-ms: 120000
 
 engine:
   client:

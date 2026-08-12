@@ -91,6 +91,14 @@ button:focus-visible {
     color: var(--danger);
 }
 
+/* Reconnecting notice. Quieter than the error banner: no border, muted colour.
+   Sits immediately after the status line so it reads as a footnote to it. */
+.connection {
+    font-size: var(--text-label);
+    opacity: .7;
+    margin: calc(var(--step) * .5) 0 0;
+}
+
 /* The one line that changes meaning as you watch, so it gets weight rather than
    size — size is reserved for the title. */
 .status {

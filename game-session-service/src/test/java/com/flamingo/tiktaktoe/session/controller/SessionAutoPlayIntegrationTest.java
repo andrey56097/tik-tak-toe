@@ -12,20 +12,26 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -103,6 +109,34 @@ class SessionAutoPlayIntegrationTest {
         // The claim is one-shot: a finished session cannot be replayed.
         mockMvc.perform(post("/sessions/{id}/simulate", sessionId))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    @Timeout(30)
+    void streamDeliversEventsForEveryStateTransition() throws Exception {
+        when(gameEngineClient.makeMove(anyString(), any(MoveRequest.class)))
+                .thenAnswer(invocation -> boardState(invocation.getArgument(0), GameStatus.WIN));
+
+        String createBody = mockMvc.perform(post("/sessions"))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String sessionId = JsonPath.read(createBody, "$.sessionId");
+
+        // Subscribe to the SSE stream before starting the simulation — per the
+        // milestone-5 plan, this ensures no events are missed.
+        MvcResult streamResult = mockMvc.perform(get("/sessions/{id}/stream", sessionId)
+                        .accept(MediaType.TEXT_EVENT_STREAM_VALUE))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        mockMvc.perform(post("/sessions/{id}/simulate", sessionId))
+                .andExpect(status().isAccepted());
+
+        // Async dispatch captures the stream — with move-delay-ms=0 the game
+        // finishes in one move, so the emitter completes quickly.
+        mockMvc.perform(asyncDispatch(streamResult))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("event:done")));
     }
 
     /**
