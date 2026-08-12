@@ -5,19 +5,12 @@
 // same-origin, and is the only change this file needs then.
 const API_BASE = 'http://localhost:8082';
 
-const POLL_INTERVAL_MS = 500;
-
-// A game is at most 9 moves at ~1s each. The cap exists so a session wedged in
-// RUNNING — or a backend that never recovers — cannot make this tab poll
-// forever. It is also why polling errors need no separate retry budget: the
-// next tick is the retry, and this bounds how many there can be.
-const MAX_POLLS = 120;
-
 const BOARD_SIZE = 3;
 
 const startButton = document.getElementById('start');
 const statusLine = document.getElementById('status');
 const errorLine = document.getElementById('error');
+const connectionLine = document.getElementById('connection');
 const boardEl = document.getElementById('board');
 const historyEl = document.getElementById('history');
 const sessionLine = document.getElementById('session');
@@ -120,6 +113,16 @@ function clearError() {
     errorLine.textContent = '';
 }
 
+function showConnecting() {
+    connectionLine.textContent = 'Reconnecting…';
+    connectionLine.hidden = false;
+}
+
+function clearConnecting() {
+    connectionLine.hidden = true;
+    connectionLine.textContent = '';
+}
+
 /**
  * Pulls the message the backend already phrased for us. Every non-2xx response
  * in this system carries the shared ErrorResponse body, so there is nothing to
@@ -137,71 +140,55 @@ async function errorMessageFrom(response) {
     return `Request failed with status ${response.status}`;
 }
 
-function isTerminal(session) {
-    return session.status === 'COMPLETED' || session.status === 'FAILED';
-}
-
-/**
- * Polls until the session reaches a terminal status or the cap is hit.
- *
- * Deliberately a setTimeout chain rather than setInterval: the next tick is
- * scheduled only after the current response has been handled, so there can
- * never be two requests in flight and a slow response cannot land after a
- * fresher one and paint stale state.
- */
-function pollUntilDone(sessionId) {
-    let polls = 0;
-
-    async function tick() {
-        polls++;
-        try {
-            const response = await fetch(`${API_BASE}/sessions/${sessionId}`);
-            if (response.status === 404) {
-                showError('The session no longer exists.');
-                finish();
-                return;
-            }
-            if (!response.ok) {
-                showError(await errorMessageFrom(response));
-            } else {
-                const session = await response.json();
-                clearError();
-                render(session);
-                if (isTerminal(session)) {
-                    finish();
-                    return;
-                }
-            }
-        } catch (networkFailure) {
-            // No response at all, so there is no ErrorResponse to read. Keep
-            // going: a blip resolves itself on the next tick, and a lasting
-            // outage is bounded by MAX_POLLS.
-            showError('Cannot reach the session service.');
-        }
-
-        if (polls >= MAX_POLLS) {
-            showError('Stopped waiting: the simulation did not finish in time.');
-            finish();
-            return;
-        }
-        setTimeout(tick, POLL_INTERVAL_MS);
-    }
-
-    tick();
-}
-
 function finish() {
     startButton.disabled = false;
 }
 
 /**
- * Create the session, show it, then ask for the simulation. Polling starts only
- * once the simulation is accepted — a 404 or 409 there means there is nothing
- * to watch, and polling anyway would just hammer the service.
+ * Subscribes to the SSE stream for a session. The stream sends one event per
+ * state transition, each carrying the full {@code SessionResponse}, and a
+ * named {@code done} event when the game ends — at which point the client
+ * closes the connection so EventSource does not auto-reconnect.
+ *
+ * A dropped connection shows a quiet "Reconnecting" notice; EventSource
+ * reconnects on its own, so the notice clears itself on the next delivered
+ * event. The red error banner is reserved for real failures (session not
+ * found, could not create one).
+ */
+function watchSession(sessionId) {
+    const eventSource = new EventSource(`${API_BASE}/sessions/${sessionId}/stream`);
+
+    eventSource.addEventListener('message', (event) => {
+        clearError();
+        clearConnecting();
+        const session = JSON.parse(event.data);
+        render(session);
+    });
+
+    eventSource.addEventListener('done', () => {
+        eventSource.close();
+        finish();
+    });
+
+    eventSource.onerror = () => {
+        // EventSource fires onerror on every drop, including ones it recovers
+        // from immediately. The "Reconnecting" notice is quiet and self-clearing;
+        // the error banner is only for errors the page itself caused.
+        showConnecting();
+    };
+}
+
+/**
+ * Creates the session, opens the SSE stream, then starts the simulation.
+ *
+ * The stream is opened before simulate: with the move delay set low the
+ * game can finish before a late subscriber attaches, and then the page
+ * would show the result without ever showing the play.
  */
 async function startSimulation() {
     startButton.disabled = true;
     clearError();
+    clearConnecting();
 
     let session;
     try {
@@ -221,6 +208,9 @@ async function startSimulation() {
     sessionLine.textContent = `Session ${session.sessionId}`;
     render(session);
 
+    // Subscribe before starting — see doc comment above.
+    watchSession(session.sessionId);
+
     try {
         const started = await fetch(`${API_BASE}/sessions/${session.sessionId}/simulate`, { method: 'POST' });
         if (!started.ok) {
@@ -233,8 +223,6 @@ async function startSimulation() {
         finish();
         return;
     }
-
-    pollUntilDone(session.sessionId);
 }
 
 startButton.addEventListener('click', startSimulation);

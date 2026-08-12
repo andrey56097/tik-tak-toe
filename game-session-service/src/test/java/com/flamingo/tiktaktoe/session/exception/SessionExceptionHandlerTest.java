@@ -2,6 +2,7 @@ package com.flamingo.tiktaktoe.session.exception;
 
 import com.flamingo.tiktaktoe.session.controller.SessionController;
 import com.flamingo.tiktaktoe.session.orchestrator.GameSessionOrchestrator;
+import com.flamingo.tiktaktoe.session.publisher.GameUpdatePublisher;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -25,11 +26,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * slice. It loads only the web layer — {@link SessionController}, the
  * {@code @RestControllerAdvice}, and MockMvc — NOT the service beans
  * ({@code RestGameEngineClient}, {@code SessionSimulationRunner},
- * {@code RestClientConfig}, Eureka, async/retry AOP). {@link
- * GameSessionOrchestrator} is replaced by a {@code @MockitoBean} so the
- * controller's constructor is satisfied without dragging in the real
- * orchestrator (or its dependencies). This keeps the context light and focused
- * on the advice mapping.
+ * {@code RestClientConfig}, Eureka, async/retry AOP). Both {@link
+ * GameSessionOrchestrator} (which the controller already depended on before
+ * this milestone) and {@link GameUpdatePublisher} (added in Milestone 5 for
+ * the SSE stream endpoint) are replaced by {@code @MockitoBean}s so the
+ * controller's constructor is satisfied without dragging in their
+ * dependencies. This keeps the context light and focused on the advice
+ * mapping.
  */
 @WebMvcTest(SessionController.class)
 class SessionExceptionHandlerTest {
@@ -39,6 +42,9 @@ class SessionExceptionHandlerTest {
 
     @MockitoBean
     private GameSessionOrchestrator orchestrator;
+
+    @MockitoBean
+    private GameUpdatePublisher publisher;
 
     @Test
     void unknownResourcePath_returns404ErrorResponse() throws Exception {

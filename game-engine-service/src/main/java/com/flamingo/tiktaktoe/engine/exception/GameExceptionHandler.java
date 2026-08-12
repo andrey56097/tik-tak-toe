@@ -5,12 +5,19 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.util.Arrays;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -64,6 +71,49 @@ public class GameExceptionHandler {
                                                                 HttpServletRequest request) {
         return errorResponse(HttpStatus.CONFLICT,
                 "Game was updated concurrently; retry the move", request);
+    }
+
+    /**
+     * Jackson cannot deserialize the body — wrong type, unknown enum, broken JSON,
+     * missing field. The client sent something unreadable, so it is a 400 with a
+     * fixed client-safe message. The real deserialization failure is not logged:
+     * it is a routine client mistake already communicated by the response.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleNotReadable(HttpMessageNotReadableException ex,
+                                                           HttpServletRequest request) {
+        return errorResponse(HttpStatus.BAD_REQUEST, "Malformed request body", request);
+    }
+
+    /**
+     * A request hit a path nothing is mapped to — the resource does not exist.
+     * This is a routine client mistake (typo, wrong URL) so it is not logged.
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNoResourceFound(NoResourceFoundException ex,
+                                                               HttpServletRequest request) {
+        return errorResponse(HttpStatus.NOT_FOUND, "Resource not found", request);
+    }
+
+    /**
+     * The path exists but the HTTP method is wrong. A 405 with an {@code Allow}
+     * header listing the supported methods, per RFC 9110.
+     * This is a routine client mistake so it is not logged.
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMethodNotSupported(
+            HttpRequestMethodNotSupportedException ex, HttpServletRequest request) {
+        ErrorResponse body = ErrorResponse.of(
+                HttpStatus.METHOD_NOT_ALLOWED.value(),
+                HttpStatus.METHOD_NOT_ALLOWED.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI());
+        HttpHeaders headers = new HttpHeaders();
+        Set<HttpMethod> methods = Arrays.stream(ex.getSupportedMethods())
+                .map(HttpMethod::valueOf)
+                .collect(Collectors.toSet());
+        headers.setAllow(methods);
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).headers(headers).body(body);
     }
 
     @ExceptionHandler(BoardMappingException.class)
