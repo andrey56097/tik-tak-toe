@@ -157,7 +157,7 @@ don't copy it. (These were codified after a production-readiness audit of Milest
 
 ## System Architecture
 
-The system is a **distributed Tic Tac Toe** — five independent Spring Boot services plus one shared module, all in this monorepo (no shared parent build; `common` is the *only* shared dependency).
+The system is a **Tic Tac Toe** — five independent Spring Boot services plus one shared module, all in this monorepo (no shared parent build; `common` is the *only* shared dependency).
 
 | Service | Module (target) | Port | Eureka name |
 | --- | --- | --- | --- |

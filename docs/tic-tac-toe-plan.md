@@ -1,4 +1,4 @@
-# Distributed Tic Tac Toe — Implementation Plan
+# Tic Tac Toe — Implementation Plan
 
 > **Source of requirements:** [docs/task.md](./task.md) — the assignment. This plan is built on it and tracks it item-by-item (see «Assignment requirements coverage»). If the two ever conflict, `task.md` wins.
 
