@@ -67,11 +67,14 @@ pitest {
     junit5PluginVersion.set("1.2.1")
     pitestVersion.set("1.22.1")
     targetClasses.set(setOf("com.flamingo.tiktaktoe.session.*"))
-    // @Configuration classes are wiring, not logic: their only mutants are
-    // "return null instead of the bean", which nothing but an assertion that the
-    // bean is non-null can kill. Such tests catch no regression, so the classes
-    // are out of scope here — the full context boots in
-    // SessionAutoPlayIntegrationTest, which is what actually proves the wiring.
+    // Excluded because Pitest mutates method *bodies*, and what these classes
+    // decide lives in annotations: which RestClient.Builder is @Primary, which is
+    // @LoadBalanced, which origins CorsConfig allows. Those decisions are
+    // load-bearing — getting the first one wrong silently breaks this service's
+    // Eureka registration — but no body mutant can express them, so including
+    // the package would only measure "return null instead of the bean". The real
+    // gate for them is RestClientConfigTest and CorsConfigTest, which assert the
+    // resulting behaviour against a booted context.
     excludedClasses.set(setOf("com.flamingo.tiktaktoe.session.config.*"))
     outputFormats.set(setOf("XML", "HTML"))
     timestampedReports.set(false)

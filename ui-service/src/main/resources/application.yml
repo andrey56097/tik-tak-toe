@@ -1,0 +1,31 @@
+spring:
+  application:
+    name: ui-service
+  web:
+    resources:
+      cache:
+        cachecontrol:
+          # Static resources ship with only Last-Modified by default, and no
+          # Cache-Control at all. Browsers then apply *heuristic* freshness and
+          # serve app.css/app.js from cache without ever asking this service —
+          # so a deployed change is invisible until the user hard-reloads.
+          # `no-cache` still lets the browser store the file; it just has to
+          # revalidate, which costs one conditional request answered with 304.
+          # The page is a handful of small files, so that is the right trade.
+          no-cache: true
+
+server:
+  port: 8083
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+  instance:
+    lease-renewal-interval-in-seconds: 5
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

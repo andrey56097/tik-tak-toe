@@ -1,0 +1,209 @@
+:root {
+    color-scheme: light dark;
+    --line: #8888;
+    --accent: #2f6fdb;
+    --danger: #c0392b;
+
+    /* One rhythm unit. Every margin, gap and inset below is a multiple of it,
+       so the page has a single vertical beat instead of a dozen hand-picked
+       values that almost agree. */
+    --step: .5rem;
+
+    /* Four sizes, and no fifth. The title is the only large text on the page;
+       everything that labels rather than says something shares one small size,
+       which is what makes a label read as a label. */
+    --text-title: 1.75rem;
+    --text-body: 1rem;
+    --text-label: .8125rem;
+
+    /* The height of one move in the history. Nine of these is the whole game,
+       which is what lets the list below reserve its full height up front. */
+    --move-row: 1.75rem;
+}
+
+body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.5;
+    margin: 0;
+    padding: calc(var(--step) * 6) calc(var(--step) * 2);
+}
+
+main {
+    /* Wide enough for the 18rem board and a column of move text beside it,
+       and no wider — the reading measure of the subtitle sets the ceiling. */
+    max-width: 40rem;
+    margin: 0 auto;
+}
+
+/* The default beat between blocks. Anything that needs a different gap says so
+   below, once, instead of every block carrying its own margin pair. */
+main > * + * {
+    margin-top: calc(var(--step) * 2);
+}
+
+h1 {
+    font-size: var(--text-title);
+    line-height: 1.2;
+    /* Title and subtitle are one unit, so they sit tighter than the page beat. */
+    margin: 0 0 var(--step);
+}
+
+/* Section headings label the block under them; they are signposts, not
+   statements, so they take the label size and let the content carry the weight. */
+h2 {
+    font-size: var(--text-label);
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    opacity: .6;
+    margin: calc(var(--step) * 5) 0 var(--step);
+}
+
+.subtitle {
+    margin: 0;
+    opacity: .7;
+}
+
+button {
+    font: inherit;
+    padding: calc(var(--step) * 1.5) calc(var(--step) * 3);
+    border: 0;
+    border-radius: calc(var(--step) * .75);
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+}
+
+button:disabled {
+    opacity: .5;
+    cursor: default;
+}
+
+button:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+}
+
+.error {
+    margin: calc(var(--step) * 2) 0 0;
+    padding: var(--step) calc(var(--step) * 1.5);
+    border-left: 3px solid var(--danger);
+    color: var(--danger);
+}
+
+/* The one line that changes meaning as you watch, so it gets weight rather than
+   size — size is reserved for the title. */
+.status {
+    font-size: var(--text-body);
+    font-weight: 600;
+    margin: calc(var(--step) * 4) 0 calc(var(--step) * 1.5);
+}
+
+/* Board and transcript, side by side. One column until there is room for the
+   board plus a readable column of move text next to it — below that the two
+   would fight over the width and the moves would wrap. */
+.stage {
+    display: grid;
+    grid-template-columns: min(18rem, 100%);
+    gap: calc(var(--step) * 5);
+    /* Columns are read from the top down; without this the shorter one would
+       stretch and its content would drift away from the board's top edge. */
+    align-items: start;
+}
+
+@media (min-width: 36rem) {
+    .stage {
+        grid-template-columns: 18rem 1fr;
+    }
+}
+
+/* The heading is the top of this column, so it drops the standing gap that
+   separates sections in a single flow — its cap height lines up with the
+   board's top edge instead. */
+.moves h2 {
+    margin-top: 0;
+}
+
+.board {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    /* Rows must be declared as explicit fractions too. Left implicit they are
+       auto-sized — driven by their content — and `align-content: stretch` then
+       hands the leftover height to every track *equally* instead of equalising
+       them. A row holding a glyph therefore stays taller than an empty one
+       (measured 134.7 / 74.7 / 74.7 px on a 292 px board), so the marks visibly
+       jump as moves land in different rows. Push the font up (a zoomed page, a
+       large system font, a narrow window) and it degenerates further: at a
+       60 px root font the rows measure 225 / 0 / 0, the board is no longer
+       square, and the glyph fills its cell edge to edge. */
+    grid-template-rows: repeat(3, 1fr);
+    /* Makes the board a container so the glyph below can be expressed as a
+       fraction of its width. Deliberately `inline-size` and not `size`: only the
+       inline axis is queried, and full size containment would make the board's
+       height depend entirely on `aspect-ratio` surviving — delete that line and
+       the board collapses to 292x8 instead of merely losing its square. */
+    container-type: inline-size;
+    /* The gap plus a background is what draws the grid lines — no per-cell
+       borders to reconcile at the edges. */
+    gap: 2px;
+    background: var(--line);
+    border: 2px solid var(--line);
+    width: min(18rem, 100%);
+    aspect-ratio: 1;
+}
+
+.cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: Canvas;
+    /* Sized against the board, not the root font: a fixed rem value keeps
+       growing after the board has stopped (the board is capped at 18rem *or*
+       the viewport, whichever is smaller), which is what made the glyph outgrow
+       its cell. 14% of the board width is ~42% of a cell at every font size and
+       every window width. */
+    font-size: 14cqw;
+    /* Overrides the body's 1.5: that half-line of leading is invisible slack
+       around a single glyph, and centring is what positions it anyway. */
+    line-height: 1;
+    font-weight: 600;
+    /* Cells are square because the board is, and the grid splits it evenly. */
+}
+
+.history {
+    margin: 0;
+    padding-left: calc(var(--step) * 4);
+    /* A game is at most nine moves, so nine rows is the most this list can ever
+       need. Reserving them from the start is what stops the session line below
+       from being shoved down a row at a time as the game plays — the space a
+       move will occupy is already there before the move arrives. */
+    min-height: calc(9 * var(--move-row));
+}
+
+.history li {
+    height: var(--move-row);
+    line-height: var(--move-row);
+}
+
+/* An empty list is the normal state before the first move, not an error, so it
+   says what will happen rather than reporting that nothing has. */
+.history:empty::after {
+    content: "Moves appear here as they are played.";
+    display: block;
+    line-height: var(--move-row);
+    opacity: .6;
+}
+
+/* An identifier, not prose: monospaced so it reads as something to copy and
+   match against a log, and quiet because you only need it when something has
+   gone wrong. The rule above it closes the composition and marks the line as
+   metadata about the run rather than another piece of the run. */
+.session {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    font-size: var(--text-label);
+    opacity: .6;
+    margin-top: calc(var(--step) * 5);
+    padding-top: calc(var(--step) * 2);
+    border-top: 1px solid var(--line);
+    word-break: break-all;
+}
