@@ -50,9 +50,9 @@
 
 This repository implements a **Tic Tac Toe**: the game is not a single monolith but a set of independent services — a *game engine* (rules & persistence), a *game session* (orchestrator that plays the game), and a *UI* — connected through service discovery (Eureka) and an **API gateway**, with the board updating live in the browser as the services play.
 
-The assignment is treated as a production-grade distributed system: layered services, design patterns (Strategy, Repository, Adapter, DTO), proper error handling, and a comprehensive test suite — unit, integration, and concurrency.
+The assignment is treated as a production-grade distributed system: layered services, design patterns (Strategy, Repository, Adapter, DTO), proper error handling, and a test suite gated by coverage and mutation thresholds.
 
-> **Status:** 🔨 in development, and **all three components `task.md` requires now exist and play together** — the **Game Engine** (rules, H2, upsert move endpoint), the **Game Session** orchestrator (auto-play, retries, timeouts) and the **UI** (a board that fills itself in the browser), plus **Eureka** registration and the shared `common` contract. The browser currently keeps itself current by polling `GET /sessions/{id}`; Milestone 5 replaces that with an SSE push channel. Not built yet: SSE push, gateway, Docker. The feature table below describes the target system; the [Roadmap](#roadmap) marks what each milestone closes and which are optional per `task.md`.
+> **Status:** 🔨 in development, and **the whole system runs**: the **Game Engine** (rules, H2, upsert move endpoint), the **Game Session** orchestrator (auto-play, retries, timeouts), the **UI** (a board that fills itself in the browser), **Eureka** registration, the **SSE** push channel that updates the board the instant a move lands, the **Gateway** that puts all of it behind `localhost:8080`, and **Docker Compose** that starts the five services with one command. Still open: the dedicated testing block of Milestone 7, and the final polish of Milestone 10. The [Roadmap](#roadmap) marks what each milestone closes and which are optional per `task.md`.
 >
 > **Requirements source:** the assignment is authoritative in [docs/task.md](docs/task.md) (the home assignment). The implementation plan is built on it and tracks it item-by-item.
 
@@ -64,12 +64,12 @@ The assignment is treated as a production-grade distributed system: layered serv
 |------|------|
 | 🤖 **Self-playing game** | The session orchestrator picks a move (random strategy for v1), submits it, and repeats until the game ends. |
 | 🏗️ **Microservice architecture** | Game engine, session orchestrator, UI, service discovery, and gateway as independent deployable units. |
-| ⚡ **Live board** | The page redraws from full session state as each move lands — by polling today, pushed over **SSE** from Milestone 5. The renderer never sees the difference. |
-| 🗺️ **Service discovery & routing** | Netflix Eureka registers services today; Spring Cloud Gateway becomes the single entry point (`:8080`) in Milestone 6. |
+| ⚡ **Live board** | The page redraws from full session state as each move lands, pushed over **SSE**. The renderer takes whole states, never deltas, so the transport stayed swappable when polling was replaced. |
+| 🗺️ **Service discovery & routing** | Netflix Eureka registers every service; Spring Cloud Gateway is the single entry point (`:8080`) and routes by service name. |
 | 🗄️ **Persistent-by-design state** | H2 in-memory DB behind a real JPA repository — one line away from file-based persistence. |
-| 🐳 **Dockerized** *(planned)* | The whole stack starts with a single `docker-compose up` — isolated containers communicating over the compose network by service name. |
-| 🧪 **Tested end-to-end** | Unit, integration, and concurrency tests across all services. |
-| 🔄 **CI/CD** *(partial)* | GitHub Actions reviews every PR today; a build + test + quality workflow lands in Milestone 8. |
+| 🐳 **Dockerized** | `docker compose up` starts all five services in isolated containers that reach each other over the compose network by service name. |
+| 🧪 **Tested** | Unit tests everywhere, with JaCoCo coverage and Pitest mutation floors gating the engine and session builds. The dedicated integration and concurrency suite is Milestone 7. |
+| 🔄 **CI** | GitHub Actions runs `./gradlew build` on every push and PR, and an AI reviewer comments on each PR. A red build blocks the merge. |
 
 ---
 
@@ -81,7 +81,7 @@ The assignment is treated as a production-grade distributed system: layered serv
 | **Framework** | [Spring Boot 4.1.x](https://spring.io/projects/spring-boot) |
 | **Cloud** | [Spring Cloud 2025.1.2 "Oakwood"](https://spring.io/projects/spring-cloud) — Eureka, Gateway |
 | **Data** | Spring Data JPA + [H2](https://www.h2database.com/) (in-memory) |
-| **Realtime** | Browser polling today → **Server-Sent Events** (native `EventSource`, no JS libraries) from Milestone 5 |
+| **Realtime** | **Server-Sent Events** — native `EventSource`, no JS libraries |
 | **HTTP Client** | Spring `RestClient` (synchronous, `@LoadBalanced`, connect + read timeouts) |
 | **Build** | Gradle 9.x (wrapper) + Kotlin DSL |
 | **Testing** | JUnit 5, Mockito, WireMock, Testcontainers *(optional)* |
@@ -127,7 +127,7 @@ flowchart TB
 
 1. The **browser** talks only to the **gateway** (`:8080`) — it never knows internal service ports.
 2. The gateway routes requests **by service name** (`lb://GAME-SESSION-SERVICE`, …) using addresses it discovers from **Eureka**.
-3. The **Game Session Service** orchestrates a whole game: it calls its own move strategy and submits each move over **REST** (the move endpoint creates the game on first use), recording the fresh board after each one. The **UI service serves only the static page** — the board in the browser reads state from Session directly, by polling today and over an **SSE** stream from Milestone 5.
+3. The **Game Session Service** orchestrates a whole game: it calls its own move strategy and submits each move over **REST** (the move endpoint creates the game on first use), recording the fresh board after each one. The **UI service serves only the static page** — the board in the browser reads state from Session over an **SSE** stream.
 4. The **Game Engine Service** owns the rules: move validation, winner detection, and persistence to **H2**.
 
 > A full game-cycle sequence diagram is in the [implementation plan](docs/tic-tac-toe-plan.md#one-game-cycle-sequence).
@@ -138,7 +138,7 @@ flowchart TB
 - **Layered Architecture** inside each service (Controller → Service → Repository).
 - **API Gateway + Service Discovery** — single entry point routing by service name via Eureka.
 - **Ports & Adapters (partially)** — business logic depends on interfaces (`GameRepository`, `MoveStrategy`, `GameEngineClient`); concrete adapters are plugged in via DI.
-- **Publish-Subscribe / Observer** — `GameUpdatePublisher` (Milestone 5): Session publishes a state update, subscribed browsers receive it over SSE, and neither knows the other directly. Until then the browser polls, which needs no publisher at all.
+- **Publish-Subscribe / Observer** — `GameUpdatePublisher`: Session publishes a state update, subscribed browsers receive it over SSE, and neither knows the other directly.
 - **DTO pattern** — JPA entities stay separate from API models.
 
 ---
@@ -165,7 +165,7 @@ POST /sessions  ──▶  session starts  ──▶  Game Session creates a gam
        ▲                              │
        │                              ▼
   full session state ◀──────  new GameState after every move
-  (polled today, pushed over SSE from Milestone 5)
+  (pushed over SSE as each move lands)
        │
        ▼
   Board redraws until status ∈ {IN_PROGRESS, WIN, DRAW}
@@ -316,43 +316,36 @@ To run one module's suite alone, name it — `./gradlew :game-engine-service:tes
 
 ## Project Structure
 
-```
-tik-tak-toe/
-├── .claude/                 # Claude Code workspace — commands, agents, skills, plans, hooks
-│   ├── hooks/               #   Hook scripts wired up in settings.json
-│   └── README.md            #   Claude Code conventions for this repo
-├── docs/
-│   ├── task.md              #   Assignment requirements (source of truth)
-│   └── tic-tac-toe-plan.md  #   Full implementation plan & architecture
-├── gradle/wrapper/          # Pinned Gradle distribution
-├── src/
-│   ├── main/
-│   │   ├── java/com/flamingo/tiktaktoe/
-│   │   │   └── TikTakToeApplication.java   # Spring Boot entry point
-│   │   └── resources/
-│   │       └── application.properties
-│   └── test/java/com/flamingo/tiktaktoe/
-│       └── TikTakToeApplicationTests.java  # Smoke test (@SpringBootTest)
-├── build.gradle.kts         # Java 21 · Spring Boot 4.1.0 · Gradle Kotlin DSL
-├── settings.gradle
-├── gradlew / gradlew.bat    # Wrapper scripts
-└── .gitignore
-```
-
-**Target structure** — the monorepo will grow to five independent services plus a shared module:
+A monorepo of five independent Spring Boot services plus one shared module.
+There is no root application and no shared parent build: the root
+`settings.gradle.kts` only aggregates the modules, and `common` is the single
+dependency any of them share.
 
 ```
 tik-tak-toe/
 ├── common/                  # Shared DTOs: GameState, MoveRequest, CellState, GameStatus
-├── eureka-server/           # Service discovery                        :8761
-├── gateway/                 # Spring Cloud Gateway — single entry point :8080
-├── game-engine-service/     # Game rules, validation, H2 persistence   :8081
-├── game-session-service/    # Orchestrator: auto-play loop            :8082
-├── ui-service/              # Serves the static HTML/CSS/JS board      :8083
+├── eureka-server/           # Service discovery                         :8761
+├── gateway/                 # Spring Cloud Gateway — single entry point  :8080
+├── game-engine-service/     # Game rules, validation, H2 persistence     :8081
+├── game-session-service/    # Orchestrator: auto-play loop               :8082
+├── ui-service/              # Serves the static HTML/CSS/JS board        :8083
 ├── docker/Dockerfile        # One multi-stage recipe, built once per service
 ├── docker-compose.yml       # The five services, one network, one command
-└── scripts/smoke.sh         # Up → play a game through :8080 → down
+├── scripts/smoke.sh         # Up → play a game through :8080 → down
+├── docs/
+│   ├── task.md              #   Assignment requirements (source of truth)
+│   └── tic-tac-toe-plan.md  #   Full implementation plan & architecture
+├── .claude/                 # Claude Code workspace — plans, skills, hooks, settings
+├── .github/workflows/       # CI (build + test + quality) and AI PR review
+├── gradle/wrapper/          # Pinned Gradle distribution
+├── settings.gradle.kts      # Aggregates the six modules
+└── gradlew / gradlew.bat    # Wrapper scripts
 ```
+
+Each service keeps its own `build.gradle.kts` and its own jar in
+`<module>/build/libs/`; layers live in subpackages under
+`com.flamingo.tiktaktoe.<service>` — `controller`, `service`, `domain`,
+`repository`, `validation`, `exception` — and the tests mirror them.
 
 ---
 
@@ -374,7 +367,7 @@ tik-tak-toe/
 | `GET` | `/` | UI | The board page | `200` | — | added | live · M4 |
 | `GET` | `/actuator/health` | Engine, Session, UI | Liveness for Eureka and operators | `200` | — | added | live |
 | `GET` | `/v3/api-docs`, `/swagger-ui.html` | Engine, Session | OpenAPI spec and Swagger UI, generated from the code | `200` | — | added | live |
-| `GET` | `/sessions/{sessionId}/stream` | Session | Subscribe to live state updates (`text/event-stream`) | `200` | `404` | added | planned · M5 |
+| `GET` | `/sessions/{sessionId}/stream` | Session | Subscribe to live state updates (`text/event-stream`) | `200` | `404` | added | live · M5 |
 
 Every error body is the shared `ErrorResponse` — `{timestamp, status, error,
 message, path}` — from the `common` module, never a raw exception string.
@@ -385,18 +378,10 @@ stream and a snapshot want different timeouts, buffering and caching than
 `GET /sessions/{id}` does. The reasoning is in the
 [plan](docs/tic-tac-toe-plan.md).
 
-> **Known defect (fix in Milestone 5):** Engine answers `500` where it owes
-> `400` (a body Jackson cannot bind — an unknown player symbol, a missing field,
-> malformed JSON), `404` (an unmapped path) or `405` (a wrong method).
-> `GameExceptionHandler` lacks handlers for `HttpMessageNotReadableException`,
-> `NoResourceFoundException` and `HttpRequestMethodNotSupportedException`, so all
-> three fall into its catch-all. Session already handles the latter two
-> correctly. Valid-but-illegal moves and unknown game ids are unaffected — those
-> return `400` and `404` today.
-
-Once the gateway lands (Milestone 6), all public routes will be reachable
-through `localhost:8080`. Until then each service is called on its own port —
-Engine `8081`, Session `8082`, UI `8083`.
+All public routes are reachable through the gateway on `localhost:8080`. When
+the services are started from source rather than with Compose, each is also
+callable on its own port — Engine `8081`, Session `8082`, UI `8083` — which is
+how the Swagger UIs are reached.
 
 **API docs** are generated from the code by **springdoc-openapi**, so they cannot drift from the contract — kept per service (KISS) rather than aggregated at the gateway.
 
