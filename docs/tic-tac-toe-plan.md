@@ -17,7 +17,7 @@
 | Session → UI communication | **Polling first** (`GET /sessions/{id}`, Milestone 4), then **SSE** push (Milestone 5). The traffic is strictly one-way (server → browser), which is exactly SSE's shape: native `EventSource`, zero JS libraries, automatic reconnect, and `Last-Event-ID` replay. WebSocket + STOMP was the earlier choice and is kept as the documented alternative — see *Possible future improvements* |
 | Move strategy (v1) | Random move (simple implementation) |
 | Testing (unit) | JUnit 5 + Mockito |
-| Testing (integration) | Spring Boot Test, `@SpringBootTest`, `MockWebServer` / `WireMock`, Testcontainers (optional) |
+| Testing (integration) | Spring Boot Test, `@SpringBootTest`, `MockWebServer`, Testcontainers (optional) |
 | Testing (mutation) | **Pitest** (Gradle plugin) — mutation testing is mandatory |
 | API documentation | springdoc-openapi **v3.x** — Swagger UI (`/swagger-ui.html`) + OpenAPI spec (`/v3/api-docs`), generated from code |
 | Containerization | Docker + docker-compose (one image per service) |
@@ -292,7 +292,7 @@ graph LR
 
     subgraph Integration["Integration tests"]
         I1["Engine ↔ H2:<br/>@DataJpaTest"]
-        I2["Session ↔ Engine:<br/>WireMock / MockWebServer,<br/>simulated REST responses"]
+        I2["Session ↔ Engine:<br/>MockWebServer,<br/>simulated REST responses"]
         I3["Full game loop:<br/>@SpringBootTest,<br/>real HTTP calls<br/>between running services"]
     end
 
@@ -308,56 +308,56 @@ graph LR
 ## Stages and Milestones
 
 ### Milestone 0 — Environment preparation *(enabler — not a `task.md` item)*
-- [ ] Create the monorepo structure (5 service folders + 1 `common` folder)
-- [ ] `common` — shared module with DTOs (`GameState`, `MoveRequest`, `CellState`, `GameStatus`), pulled in as a dependency by Engine and Session (DRY, single data contract)
-- [ ] Configure `.gitignore` at the root
-- [ ] Initialize git, make the first commit
-- [ ] Create 5 independent Spring Boot projects via Spring Initializr (Gradle + Kotlin DSL, Java 21; no shared parent build file, `common` is the only shared dependency)
+- [x] Create the monorepo structure (5 service folders + 1 `common` folder)
+- [x] `common` — shared module with DTOs (`GameState`, `MoveRequest`, `CellState`, `GameStatus`), pulled in as a dependency by Engine and Session (DRY, single data contract)
+- [x] Configure `.gitignore` at the root
+- [x] Initialize git, make the first commit
+- [x] Create 5 independent Spring Boot projects via Spring Initializr (Gradle + Kotlin DSL, Java 21; no shared parent build file, `common` is the only shared dependency)
 
 **Result:** empty project skeleton, everything compiles and runs independently.
 
 ---
 
 ### Milestone 1 — Game Engine Service + H2 *(**required** — `task.md` component 1)*
-- [ ] Dependencies: `spring-boot-starter-data-jpa`, `com.h2database:h2`
-- [ ] `application.yml`: `jdbc:h2:mem:games;DB_CLOSE_DELAY=-1`, enable H2 Console
-- [ ] Entity `GameEntity` (id, board as JSON/String, status, nextTurn) + `GameRepository extends JpaRepository<GameEntity, String>`
-- [ ] DTO models: `CellState`, `GameStatus` (`IN_PROGRESS`/`WIN`/`DRAW`), `GameState` (includes `winner`: X/O/null), `MoveRequest` (includes `player`: X/O + `row`/`col`)
-- [ ] `POST /games/{gameId}/move` — apply a move + validation (submitted `player` == whose turn, cell free, game not finished, bounds 0..2), update in H2; returns status `IN_PROGRESS` / `WIN` / `DRAW` + `winner` when finished
-- [ ] `GET /games/{gameId}` — fetch current state from H2
-- [ ] Game creation happens via `GameRepository`/H2 (Session initializes games in M3 per `task.md` — no `POST /games` endpoint in Engine)
-- [ ] Winner-detection logic (check 8 lines) and draw detection
-- [ ] **Error handling**: custom exceptions (`InvalidMoveException`, `GameNotFoundException`) + `@RestControllerAdvice` → proper HTTP statuses (400/404/409) instead of bare 500s
-- [ ] Unit tests (JUnit 5): move validation, winner/draw detection, handling invalid moves
-- [ ] `@DataJpaTest` — verify saving/reading `GameEntity` via `GameRepository`
-- [ ] Wire `springdoc-openapi-starter-webmvc-ui` (v3.x) → verify `/v3/api-docs` + `/swagger-ui.html` describe the Engine API
+- [x] Dependencies: `spring-boot-starter-data-jpa`, `com.h2database:h2`
+- [x] `application.yml`: `jdbc:h2:mem:games;DB_CLOSE_DELAY=-1`, enable H2 Console
+- [x] Entity `GameEntity` (id, board as JSON/String, status, nextTurn) + `GameRepository extends JpaRepository<GameEntity, String>`
+- [x] DTO models: `CellState`, `GameStatus` (`IN_PROGRESS`/`WIN`/`DRAW`), `GameState` (includes `winner`: X/O/null), `MoveRequest` (includes `player`: X/O + `row`/`col`)
+- [x] `POST /games/{gameId}/move` — apply a move + validation (submitted `player` == whose turn, cell free, game not finished, bounds 0..2), update in H2; returns status `IN_PROGRESS` / `WIN` / `DRAW` + `winner` when finished
+- [x] `GET /games/{gameId}` — fetch current state from H2
+- [x] Game creation happens via `GameRepository`/H2 (Session initializes games in M3 per `task.md` — no `POST /games` endpoint in Engine)
+- [x] Winner-detection logic (check 8 lines) and draw detection
+- [x] **Error handling**: custom exceptions (`InvalidMoveException`, `GameNotFoundException`) + `@RestControllerAdvice` → proper HTTP statuses (400/404/409) instead of bare 500s
+- [x] Unit tests (JUnit 5): move validation, winner/draw detection, handling invalid moves
+- [x] `@DataJpaTest` — verify saving/reading `GameEntity` via `GameRepository`
+- [x] Wire `springdoc-openapi-starter-webmvc-ui` (v3.x) → verify `/v3/api-docs` + `/swagger-ui.html` describe the Engine API
 
 **Result:** Game Engine works and is tested in isolation (Postman/curl + automated tests), state survives service reuse within a single run.
 
 ---
 
 ### Milestone 2 — Eureka Server + registration *(optional — `task.md` “Service Discovery / API Gateway”)*
-- [ ] Stand up the Eureka Server (`@EnableEurekaServer`, port 8761)
-- [ ] Add `eureka-client` to Game Engine, register under the name `GAME-ENGINE-SERVICE`
-- [ ] Verify in the console at `localhost:8761` that the service appears in the registry
+- [x] Stand up the Eureka Server (`@EnableEurekaServer`, port 8761)
+- [x] Add `eureka-client` to Game Engine, register under the name `GAME-ENGINE-SERVICE`
+- [x] Verify in the console at `localhost:8761` that the service appears in the registry
 
 **Result:** Game Engine is visible in Eureka.
 
 ---
 
 ### Milestone 3 — Game Session Service (orchestrator) *(**required** — `task.md` component 2)*
-- [ ] Add `eureka-client`, register as `GAME-SESSION-SERVICE`
-- [ ] `RestClient` with `@LoadBalanced` to call `GAME-ENGINE-SERVICE` by name
-- [ ] `decideMove()` — pick a random free cell
-- [ ] Auto-play loop: create game → move → check status → repeat until the end
-- [ ] `POST /sessions` — start a new game session (generate `sessionId`, optionally initialize a game in Engine) and **return immediately** (non-blocking)
-- [ ] `POST /sessions/{sessionId}/simulate` — trigger the automated move simulation (alternating turns) until the game concludes
-- [ ] `GET /sessions/{sessionId}` — fetch session details, move history, and current game state
-- [ ] Session storage: in-memory (`ConcurrentHashMap`) for session + move history
-- [ ] Pause between moves (for UI visibility)
-- [ ] **Error handling / communication failures**: handle Game Engine unavailability (timeout, connection refused) — try-catch around the client calls, logging, stop the session with a clear status instead of hanging
-- [ ] Unit tests: `decideMove()` on different board states, handling an erroneous Engine response (mock the client)
-- [ ] Wire `springdoc-openapi` on Session → its own `/v3/api-docs` + `/swagger-ui.html`
+- [x] Add `eureka-client`, register as `GAME-SESSION-SERVICE`
+- [x] `RestClient` with `@LoadBalanced` to call `GAME-ENGINE-SERVICE` by name
+- [x] `decideMove()` — pick a random free cell
+- [x] Auto-play loop: create game → move → check status → repeat until the end
+- [x] `POST /sessions` — start a new game session (generate `sessionId`, optionally initialize a game in Engine) and **return immediately** (non-blocking)
+- [x] `POST /sessions/{sessionId}/simulate` — trigger the automated move simulation (alternating turns) until the game concludes
+- [x] `GET /sessions/{sessionId}` — fetch session details, move history, and current game state
+- [x] Session storage: in-memory (`ConcurrentHashMap`) for session + move history
+- [x] Pause between moves (for UI visibility)
+- [x] **Error handling / communication failures**: handle Game Engine unavailability (timeout, connection refused) — try-catch around the client calls, logging, stop the session with a clear status instead of hanging
+- [x] Unit tests: `decideMove()` on different board states, handling an erroneous Engine response (mock the client)
+- [x] Wire `springdoc-openapi` on Session → its own `/v3/api-docs` + `/swagger-ui.html`
 
 **Result:** a game can be started through the Session Service and plays out automatically to completion, visible in the logs; Engine failures don't hang the service.
 
@@ -376,14 +376,14 @@ as the **optional** *mechanism*. With `move-delay-ms: 1000`, polling every 500ms
 is visually indistinguishable from push, so this milestone alone closes the
 required part.
 
-- [ ] Add `eureka-client`, register as `UI-SERVICE`; add `application.yml` with `server.port: 8083` (the module has **no** config today, so it would collide with Gateway on 8080)
-- [ ] Drop `spring-boot-starter-websocket` from `ui-service` — the WebSocket/SSE client runs in the browser, not in this JVM. The module only serves static files
-- [ ] Static page in `src/main/resources/static/` (`index.html`, `app.js`, `app.css`) — no framework, no npm, no build step, no Thymeleaf (see the note below)
-- [ ] **CORS in the Session Service**: the page is served from `:8083` and calls `:8082`, so `GET /sessions/**` and `POST /sessions/**` must allow that origin. Removed again in Milestone 6 once everything is same-origin behind the Gateway
-- [ ] `render(state)` — one function, full state in, board + status + history redrawn. **Never** incremental
-- [ ] Poll `GET /sessions/{id}` every 500ms while the session is `CREATED`/`RUNNING`; stop on `COMPLETED`/`FAILED`
-- [ ] "Start Simulation" button → `POST /sessions` → start polling → `POST /sessions/{sessionId}/simulate`
-- [ ] Display status (`IN_PROGRESS` / `WIN` / `DRAW`), the move-history log, and backend/network errors (`task.md` line 61) — render the `ErrorResponse.message` from `common`
+- [x] Add `eureka-client`, register as `UI-SERVICE`; add `application.yml` with `server.port: 8083` (the module has **no** config today, so it would collide with Gateway on 8080)
+- [x] Drop `spring-boot-starter-websocket` from `ui-service` — the WebSocket/SSE client runs in the browser, not in this JVM. The module only serves static files
+- [x] Static page in `src/main/resources/static/` (`index.html`, `app.js`, `app.css`) — no framework, no npm, no build step, no Thymeleaf (see the note below)
+- [x] **CORS in the Session Service**: the page is served from `:8083` and calls `:8082`, so `GET /sessions/**` and `POST /sessions/**` must allow that origin. Removed again in Milestone 6 once everything is same-origin behind the Gateway
+- [x] `render(state)` — one function, full state in, board + status + history redrawn. **Never** incremental
+- [x] Poll `GET /sessions/{id}` every 500ms while the session is `CREATED`/`RUNNING`; stop on `COMPLETED`/`FAILED`
+- [x] "Start Simulation" button → `POST /sessions` → start polling → `POST /sessions/{sessionId}/simulate`
+- [x] Display status (`IN_PROGRESS` / `WIN` / `DRAW`), the move-history log, and backend/network errors (`task.md` line 61) — render the `ErrorResponse.message` from `common`
 
 **Why plain HTML/JS and not a framework:** a 3×3 board is nine `<div>`s. React or
 Angular would drag npm, a bundler and `node_modules` into a Gradle monorepo for
@@ -440,17 +440,17 @@ problem this system does not have. The comparison itself is a deliverable —
 `task.md` line 89 invites a discussion of alternative designs, so it goes in the
 README.
 
-- [ ] `GameUpdatePublisher` interface in Session (port) + `SseGameUpdatePublisher` implementation holding the emitter registry. `SessionSimulationRunner` depends on the **interface**, so a WebSocket implementation would swap in with no change to the loop
-- [ ] `GET /sessions/{sessionId}/stream` (`produces = text/event-stream`), returning an `SseEmitter`. Unknown id → `SessionNotFoundException` → the same 404 `ErrorResponse` as everywhere else
-- [ ] **Send the current state as the very first event on subscribe** — a client attaching mid-game must not stare at an empty board until the next move. Same payload as `GET /sessions/{id}`
-- [ ] Support multiple subscribers per session (registry is `sessionId` → collection of emitters)
-- [ ] Publish an event after every applied move, carrying the same `SessionResponse` the polling endpoint returns — so `render(state)` is untouched
-- [ ] Set an event id per move so `Last-Event-ID` can replay what was missed after a reconnect
-- [ ] **Signal termination explicitly** with a named `done` event, then complete the emitter. `EventSource` **auto-reconnects when a stream closes**, so completing silently on `WIN`/`DRAW` would make the browser reopen the connection in a loop; the client must call `eventSource.close()` on `done`
-- [ ] Emitter timeout comfortably above the worst-case game (9 × `move-delay-ms` + Engine round-trips and retries)
-- [ ] Evict emitters on completion, timeout, error and client disconnect (`onCompletion`/`onTimeout`/`onError`) — otherwise the registry leaks
-- [ ] Frontend: replace the polling call with `new EventSource(...)`; `render(state)` untouched
-- [ ] Keep polling as the documented fallback in the README
+- [x] `GameUpdatePublisher` interface in Session (port) + `SseGameUpdatePublisher` implementation holding the emitter registry. `SessionSimulationRunner` depends on the **interface**, so a WebSocket implementation would swap in with no change to the loop
+- [x] `GET /sessions/{sessionId}/stream` (`produces = text/event-stream`), returning an `SseEmitter`. Unknown id → `SessionNotFoundException` → the same 404 `ErrorResponse` as everywhere else
+- [x] **Send the current state as the very first event on subscribe** — a client attaching mid-game must not stare at an empty board until the next move. Same payload as `GET /sessions/{id}`
+- [x] Support multiple subscribers per session (registry is `sessionId` → collection of emitters)
+- [x] Publish an event after every applied move, carrying the same `SessionResponse` the polling endpoint returns — so `render(state)` is untouched
+- [x] Set an event id per move so `Last-Event-ID` can replay what was missed after a reconnect
+- [x] **Signal termination explicitly** with a named `done` event, then complete the emitter. `EventSource` **auto-reconnects when a stream closes**, so completing silently on `WIN`/`DRAW` would make the browser reopen the connection in a loop; the client must call `eventSource.close()` on `done`
+- [x] Emitter timeout comfortably above the worst-case game (9 × `move-delay-ms` + Engine round-trips and retries)
+- [x] Evict emitters on completion, timeout, error and client disconnect (`onCompletion`/`onTimeout`/`onError`) — otherwise the registry leaks
+- [x] Frontend: replace the polling call with `new EventSource(...)`; `render(state)` untouched
+- [x] Keep polling as the documented fallback in the README
 
 **Result:** the board updates the instant a move is applied, with no polling
 traffic; the UI code above `render(state)` is unchanged.
@@ -458,13 +458,13 @@ traffic; the UI code above `render(state)` is unchanged.
 ---
 
 ### Milestone 6 — Gateway *(optional — `task.md` “Service Discovery / API Gateway”)*
-- [ ] Stand up Spring Cloud Gateway (port 8080)
-- [ ] Route to `GAME-SESSION-SERVICE` (`/sessions/**`)
+- [x] Stand up Spring Cloud Gateway (port 8080)
+- [x] Route to `GAME-SESSION-SERVICE` (`/sessions/**`)
 - [ ] Route to `GAME-ENGINE-SERVICE` (`/games/**`) — optional, for direct access/debugging
-- [ ] Route to `UI-SERVICE` (`/**`, lowest priority)
-- [ ] Confirm the SSE route streams rather than buffers — a gateway that buffers the response would break `text/event-stream`
-- [ ] **Remove the CORS configuration added in Milestone 4** — everything is served from `localhost:8080`, so the page and the API are same-origin and CORS becomes dead configuration
-- [ ] Verify that the whole flow works through the single port `localhost:8080`
+- [x] Route to `UI-SERVICE` (`/**`, lowest priority)
+- [x] Confirm the SSE route streams rather than buffers — a gateway that buffers the response would break `text/event-stream`
+- [x] **Remove the CORS configuration added in Milestone 4** — everything is served from `localhost:8080`, so the page and the API are same-origin and CORS becomes dead configuration
+- [x] Verify that the whole flow works through the single port `localhost:8080`
 
 **Result:** the entire system is reachable from one entry point; the browser doesn't know about internal service ports.
 
@@ -475,30 +475,30 @@ traffic; the UI code above `render(state)` is unchanged.
 This milestone closes the assignment's **"Testing & Validation"** section entirely — item by item:
 
 **Inter-Service Communication**
-- [ ] A test confirming that Session actually retrieves a live answer from Engine over REST (not a mock — a running Engine, or WireMock emulating its contract)
-- [ ] Verify correct serialization/deserialization of `MoveRequest`/`GameState` between services
+- [x] A test confirming that Session actually retrieves a live answer from Engine over REST (not a mock — a running Engine, or MockWebServer emulating its contract) — `SessionEngineFullGameIT.playsACompleteGameAgainstTheRealEngine` and `SessionEngineLoadBalancingIT` (real embedded Engines)
+- [x] Verify correct serialization/deserialization of `MoveRequest`/`GameState` between services — `EngineWireContractIT` (hand-written JSON literals, exact field names + enum spellings, both DTO↔wire round-trip directions)
 
 **State Management**
-- [ ] Test: after a series of moves, the state in H2 (Engine) matches what Session serves from `GET /sessions/{id}` and what it emits on the SSE stream
-- [ ] Test for state recovery on a repeated `GET /games/{id}` — data isn't "lost" between requests
+- [x] Test: after a series of moves, the state in H2 (Engine) matches what Session serves from `GET /sessions/{id}` and what it emits on the SSE stream — `SessionEngineFullGameIT.sessionStateMatchesTheEngineSideBoard` (board cell-by-cell, status, winner, id) + `SessionEngineSseIT` (per-move events carry the same state)
+- [x] Test for state recovery on a repeated `GET /games/{id}` — data isn't "lost" between requests — `SessionEngineFullGameIT.repeatedReadsOfTheSameGameAreStable` (byte-identical double read)
 
 **Error Handling**
-- [ ] Test: an invalid move (occupied cell, wrong turn) → correct HTTP status and a clear message, the game isn't broken
-- [ ] Test: Game Engine unavailable (simulated via WireMock with a delay/500 error) → Session doesn't crash, logs correctly, and ends the session with an error
-- [ ] Test: requesting a non-existent `gameId` → 404, not 500
+- [x] Test: an invalid move (occupied cell, wrong turn) → correct HTTP status and a clear message, the game isn't broken — existing `GameControllerIntegrationTest`/`EngineErrorContractIntegrationTest` (closed in Milestone 1/3)
+- [x] Test: Game Engine unavailable (simulated via MockWebServer with a delay/500 error) → Session doesn't crash, logs correctly, and ends the session with an error — `EngineUnavailableIT` (503 retried then FAILED; slow response past the read timeout fails fast) + `EngineConnectionRefusedIT` (socket refuses)
+- [x] Test: requesting a non-existent `gameId` → 404, not 500 — existing `GameExceptionHandlerTest` (closed in Milestone 1)
 
 **Integration Testing — full game loop**
-- [ ] `@SpringBootTest` scenario: create session → loop of automatic moves → get the final status (WIN/DRAW) — end to end, as close as possible to a real run
-- [ ] Verify that an SSE event actually arrives for every move (subscribe to `/sessions/{id}/stream` in the test and collect events), and that the stream terminates on `COMPLETED`/`FAILED`
-- [ ] Verify the polling path independently: `GET /sessions/{id}` reflects each move and reaches a terminal status
+- [x] `@SpringBootTest` scenario: create session → loop of automatic moves → get the final status (WIN/DRAW) — end to end, as close as possible to a real run — `SessionEngineFullGameIT.playsACompleteGameAgainstTheRealEngine`
+- [x] Verify that an SSE event actually arrives for every move (subscribe to `/sessions/{id}/stream` in the test and collect events), and that the stream terminates on `COMPLETED`/`FAILED` — `SessionEngineSseIT` (real streaming client, one event per move as moves happen, then named `done` and the server closes)
+- [x] Verify the polling path independently: `GET /sessions/{id}` reflects each move and reaches a terminal status — `SessionEnginePollingIT` (observed move counts grow 0→terminal through intermediate values)
 
 **Concurrency Handling (optional, but desirable)**
-- [ ] Test: two parallel `POST /games/{id}/move` on the same `gameId` — only one should be applied, the second should get a proper error (409), without corrupting the board state
-- [ ] At the code level: synchronization at write time (`@Transactional` + optimistic locking via `@Version` in `GameEntity`, or `synchronized`/`ReentrantLock` per `gameId` in the service layer)
+- [x] Test: two parallel `POST /games/{id}/move` on the same `gameId` — only one should be applied, the second should get a proper error (409), without corrupting the board state — `ConcurrentMoveIT` (25 races, exactly one 2xx, the loser a 400/409 `ErrorResponse`, never a 5xx, exactly one mark)
+- [x] At the code level: synchronization at write time (`@Transactional` + optimistic locking via `@Version` in `GameEntity`, or `synchronized`/`ReentrantLock` per `gameId` in the service layer) — `@Version` on `GameEntity` (Milestone 1) + the concurrency test also found and fixed a race-to-create surfacing as a 500 (`DataIntegrityViolationException` → 409 handler added)
 
 **Mutation testing**
-- [ ] Configure **Pitest** as a Gradle plugin; run `./gradlew pitest` per module
-- [ ] Every new production code is covered by mutation tests; the mutant score gates acceptance — tests that let mutants survive are too weak and must be strengthened
+- [x] Configure **Pitest** as a Gradle plugin; run `./gradlew pitest` per module — configured for both gated modules (Milestone 8), gates at 80 % mutation
+- [x] Every new production code is covered by mutation tests; the mutant score gates acceptance — tests that let mutants survive are too weak and must be strengthened — Pitest gate active in CI; the session service additionally gates on line coverage (JaCoCo 80 %, merged `test` + `integrationTest`)
 
 **Result:** there is a test suite that can be run with a single command (`./gradlew test` in each module) and that proves the system actually works as a distributed one, not just "looks like" microservices.
 

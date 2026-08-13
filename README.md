@@ -78,7 +78,7 @@ The assignment is treated as a production-grade distributed system: layered serv
 | **Realtime** | **Server-Sent Events** — native `EventSource`, no JS libraries |
 | **HTTP Client** | Spring `RestClient` (synchronous, `@LoadBalanced`, connect + read timeouts) |
 | **Build** | Gradle 9.x (wrapper) + Kotlin DSL |
-| **Testing** | JUnit 5, Mockito, WireMock, Testcontainers *(optional)* |
+| **Testing** | JUnit 5, Mockito, MockWebServer, Testcontainers *(optional)* |
 | **Ops** | Docker + docker-compose |
 | **CI/CD** | GitHub Actions (build + test + quality on push/PR) · Kubernetes readiness for deployment when needed |
 
@@ -354,6 +354,16 @@ open game-engine-service/build/reports/tests/test/index.html
 
 To run one module's suite alone, name it — `./gradlew :game-engine-service:test`.
 
+The Session↔Engine integration suite lives in its own source set and boots real
+Engine instances, so it runs separately:
+
+```bash
+./gradlew :game-session-service:integrationTest
+```
+
+`./gradlew build` includes it, plus the JaCoCo coverage gate for both gated
+modules (see [Continuous Integration](#continuous-integration)).
+
 > **Stop the stack before running the full build.** `EurekaServerApplicationTest`
 > starts the Eureka server on its real port (`DEFINED_PORT`, 8761), so
 > `./gradlew build` fails with `PortInUseException` while the services are
@@ -363,7 +373,7 @@ To run one module's suite alone, name it — `./gradlew :game-engine-service:tes
 
 | Task | Description |
 |------|------|
-| `./gradlew build` | Full build of every module — compile + test + package (also runs Pitest for the session service, so it takes a while) |
+| `./gradlew build` | Full build of every module — compile + test + package, plus the Session↔Engine integration suite, JaCoCo coverage gates and Pitest (takes a while) |
 | `./gradlew test` | Run every module's test suite |
 | `./gradlew :<module>:bootRun` | Start one service — e.g. `:ui-service:bootRun`. There is no root-level `bootRun`; see [Run](#run) |
 | `./gradlew :<module>:bootJar` | Package one service as an executable jar |
@@ -461,7 +471,7 @@ logically, not where their priority would put them.
 | 4 | **UI Service** | **required** | Browser page rendering the live board, kept current by polling |
 | 5 | SSE push Session → UI | optional | The board updates the instant a move lands, with no polling traffic |
 | 6 | Gateway | optional | Everything reachable through `localhost:8080` |
-| 7 | Testing & validation | **required** | Integration, error-handling, and concurrency suite |
+| 7 | Testing & validation | **required** | Integration, error-handling, and concurrency suite — **done** |
 | 8 | CI (build + test + quality) | beyond scope | GitHub Actions on every push/PR: build, unit + mutation tests, quality checks |
 | 9 | Docker + docker-compose | beyond scope | Whole stack up with one command — see [Run with Docker](#run-with-docker) |
 | 10 | Final polish & submission | **required** | README, code style, end-to-end verification |
@@ -482,8 +492,10 @@ flowchart LR
 
     subgraph Integration["Integration tests"]
         I1["Engine ↔ H2 · @DataJpaTest"]
-        I2["Session ↔ Engine · WireMock / MockWebServer"]
-        I3["Full game loop · @SpringBootTest, real HTTP"]
+        I2["Session ↔ Engine · real HTTP, embedded Engine cluster"]
+        I3["Full game loop · @SpringBootTest, real HTTP both sides"]
+        I4["Failure paths · MockWebServer as Engine"]
+        I5["Load balancing · two live Engine instances"]
     end
 
     subgraph Concurrency["Concurrency tests"]
@@ -492,6 +504,13 @@ flowchart LR
 
     Unit --> Integration --> Concurrency
 ```
+
+`./gradlew test` runs every module's unit/slice suite; `./gradlew build` also runs
+the Session↔Engine integration suite (`:game-session-service:integrationTest`) and
+gates on line coverage (JaCoCo, 80 %) and mutation score (Pitest, 80 %). The
+integration tests boot real Engine instances in the test JVM
+(`EmbeddedEngineCluster`) and drive the Session service over its own port, so the
+two services genuinely talk over HTTP — no mocks in that path.
 
 ---
 
@@ -543,8 +562,7 @@ second is optional direction.
 - **Nothing is ever evicted.** `InMemorySessionStore` keeps every session for the life of the process, and Engine keeps every game.
 - **Session crash mid-simulation orphans the game.** The Engine-side game stays `IN_PROGRESS` with no one driving it.
 - **`MoveRequest` carries no `row`/`col` bounds annotations.** Out-of-range coordinates are rejected by `MoveValidator` with a 400, so the contract holds, but the error reads as "cell not playable" rather than naming the offending field.
-- **Load balancing and client timeouts are not proven against a live Engine.** Both are exercised against a mock HTTP endpoint; an end-to-end proof needs a running instance (planned with WireMock in the testing milestone).
-- **The browser code has no tests.** `app.js` — the update loop, `render(state)`, the error-body mapping — and the board's layout rules are covered by nothing; `StaticPageTest` only proves the files are served and carry the ids the script drives. A real defect (marks jumping between grid rows, the glyph outgrowing its cell at large font sizes) was found by driving a browser by hand, not by the suite. Playwright is the agreed direction, deferred to the testing milestone.
+- **The browser code has no tests.** `app.js` — the update loop, `render(state)`, the error-body mapping — and the board's layout rules are covered by nothing; `StaticPageTest` only proves the files are served and carry the ids the script drives. A real defect (marks jumping between grid rows, the glyph outgrowing its cell at large font sizes) was found by driving a browser by hand, not by the suite. Playwright is the agreed direction; it was deliberately kept out of the testing milestone (which stays JVM-only) and is open work.
 
 ### Optional direction
 
