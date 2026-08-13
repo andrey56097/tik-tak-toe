@@ -44,3 +44,6 @@ out/
 *.log
 logs/
 /skills-lock.json
+
+# Test-only JS toolchain for ui-service (see ui-service/package.json).
+node_modules/

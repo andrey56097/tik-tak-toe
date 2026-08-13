@@ -43,6 +43,9 @@
          empty line, and so nothing shifts when the first session is created. -->
     <p id="session" class="session">No session yet</p>
 </main>
-<script src="app.js"></script>
+<!-- type="module" because app.js imports its formatting rules from render.js.
+     Still no bundler and no build step: the browser resolves the import itself,
+     and what is served is exactly what is in this directory. -->
+<script type="module" src="app.js"></script>
 </body>
 </html>
