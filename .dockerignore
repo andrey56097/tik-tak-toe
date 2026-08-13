@@ -1,0 +1,33 @@
+# The build context is the whole repository, because every module's build needs
+# the root settings.gradle.kts and two of them compile against :common. Without
+# this file that context also carries every build/ directory and all of .git —
+# hundreds of megabytes shipped to the daemon on every one of the five builds.
+.git
+.gradle
+# Also matches the root build/ — ** matches zero path components. Keeping host
+# build output out is not only about size: the image builds its own jar, and a
+# stale one from a host build must never reach it.
+**/build
+.idea
+*.iml
+*.iws
+*.ipr
+out
+**/.DS_Store
+*.log
+logs
+
+# Documentation cannot affect a jar, and letting it into the context would
+# invalidate the build cache every time a README sentence changes.
+docs
+README.md
+LICENSE
+.github
+.claude
+.agents
+skills-lock.json
+
+# How the images are run cannot affect what is inside them, and both files change
+# often — in the context they would only churn the build cache.
+docker-compose.yml
+scripts
