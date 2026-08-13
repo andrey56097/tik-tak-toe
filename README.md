@@ -4,34 +4,13 @@
 
 **A self-playing, microservice-based Tic Tac Toe game** — the board fills itself in real time while a service orchestrator plays random moves against the game engine.
 
-[![CI](https://github.com/andrey56097/tik-tak-toe/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/andrey56097/tik-tak-toe/actions/workflows/ci.yml)
-
-![Java](https://img.shields.io/badge/Java-21-%23E34F26?style=for-the-badge&logo=openjdk&logoColor=white)
-![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-%236DB33F?style=for-the-badge&logo=spring&logoColor=white)
-![Spring Cloud](https://img.shields.io/badge/Spring%20Cloud-2025.1.2-%236DB33F?style=for-the-badge&logo=spring&logoColor=white)
-![Gradle](https://img.shields.io/badge/Gradle-9.x-%2302303A?style=for-the-badge&logo=gradle&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)
-
-</div>
+<div style="text-align:center; white-space:nowrap;"> <a href="https://github.com/andrey56097/tik-tak-toe/actions/workflows/ci.yml"><img src="https://github.com/andrey56097/tik-tak-toe/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" style="height:22px;margin:0 1px;vertical-align:middle;"></a><img src="https://img.shields.io/badge/Java-21-%23E34F26?style=for-the-badge&logo=openjdk&logoColor=white" alt="Java" style="height:22px;margin:0 1px;vertical-align:middle;"><img src="https://img.shields.io/badge/Spring%20Boot-4.1.0-%236DB33F?style=for-the-badge&logo=spring&logoColor=white" alt="Spring Boot" style="height:22px;margin:0 1px;vertical-align:middle;"><img src="https://img.shields.io/badge/Spring%20Cloud-2025.1.2-%236DB33F?style=for-the-badge&logo=spring&logoColor=white" alt="Spring Cloud" style="height:22px;margin:0 1px;vertical-align:middle;"><img src="https://img.shields.io/badge/Gradle-9.x-%2302303A?style=for-the-badge&logo=gradle&logoColor=white" alt="Gradle" style="height:22px;margin:0 1px;vertical-align:middle;"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="License" style="height:22px;margin:0 1px;vertical-align:middle;"> </div>
 
 ---
 <div style="text-align:center;">
-<pre>
- _____ _____ _   __  _____ ___   _   __  _____ _____ _____
-|_   _|_   _| | / / |_   _/ _ \ | | / / |_   _|  _  |  ___|
-  | |   | | | |/ /    | |/ /_\ \| |/ /    | | | | | | |__
-  | |   | | |    \    | ||  _  ||    \    | | | | | |  __|
-  | |  _| |_| |\  \   | || | | || |\  \   | | \ \_/ / |___
-  \_/  \___/\_| \_/   \_/\_| |_/\_| \_/   \_/  \___/\____/
 
-        ┌───┬───┬───┐
-        │ X │ O │   │
-        ├───┼───┼───┤
-        │   │ X │ O │
-        ├───┼───┼───┤
-        │ O │   │ X │
-        └───┴───┴───┘
-</pre>
+<img width="668" height="584" alt="tik-tak-toe" src="https://github.com/user-attachments/assets/06cc5897-1243-4491-b2d3-9372653b8455" />
+
 </div>
 
 ---
