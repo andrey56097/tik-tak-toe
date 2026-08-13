@@ -5,42 +5,26 @@ import com.flamingo.tiktaktoe.session.exception.SessionConflictException;
 import com.flamingo.tiktaktoe.session.exception.SessionNotFoundException;
 
 /**
- * Persistence seam for auto-play session records. Business logic depends only
- * on this interface, never on a concrete store, so a future DB-backed store is
- * "new implementation + config" with zero changes to services/controllers.
+ * Persistence seam for auto-play session records. Business logic depends only on
+ * this interface, so a DB-backed store is "new implementation + config".
  */
 public interface SessionStore {
 
-    /**
-     * Stores the given record, overwriting any previous record for the same id.
-     *
-     * @param record the record to store
-     * @return the stored record
-     */
+    /** Stores the record, overwriting any previous one for the same id. */
     SessionRecord save(SessionRecord record);
 
-    /**
-     * Looks up a session's current record.
-     *
-     * @param sessionId the session id
-     * @return the record, or {@code null} if no session with that id exists
-     */
+    /** @return the record, or {@code null} if no session with that id exists */
     SessionRecord find(String sessionId);
 
     /**
-     * Atomically claims a {@code CREATED} session for running: transitions it
-     * to {@code RUNNING} and returns the new record.
+     * Atomically transitions a {@code CREATED} session to {@code RUNNING}.
      *
-     * <p><strong>Atomic is a requirement, not a description.</strong> Two
-     * callers racing to start the same session must produce exactly one run and
-     * one {@link SessionConflictException}. A read-then-write implementation
-     * would let both observe {@code CREATED} and both proceed, so a DB-backed
-     * store must push the check into the write itself — {@code UPDATE ... SET
-     * status = 'RUNNING' WHERE id = ? AND status = 'CREATED'}, treating an
-     * update count of zero as the conflict.
+     * <p>Atomic is a requirement, not a description: two callers racing to start
+     * the same session must produce exactly one run and one conflict. A
+     * read-then-write implementation would let both proceed, so a DB-backed store
+     * must push the check into the write — {@code UPDATE … WHERE id = ? AND
+     * status = 'CREATED'}, treating zero rows as the conflict.
      *
-     * @param sessionId the session id
-     * @return the new {@code RUNNING} record
      * @throws SessionNotFoundException if no session with that id exists
      * @throws SessionConflictException if the session is not {@code CREATED}
      */

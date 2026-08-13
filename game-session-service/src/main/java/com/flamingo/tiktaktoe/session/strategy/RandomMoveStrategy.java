@@ -22,8 +22,7 @@ public class RandomMoveStrategy implements MoveStrategy {
     public MoveRequest decideMove(String gameId, GameState currentState) {
         List<Cell> emptyCells = findEmptyCells(currentState);
         if (emptyCells.isEmpty()) {
-            throw new IllegalStateException(
-                    "No empty cells available to move into for game " + gameId);
+            throw new IllegalStateException("No empty cells available to move into for game " + gameId);
         }
 
         Cell chosen = emptyCells.get(ThreadLocalRandom.current().nextInt(emptyCells.size()));
