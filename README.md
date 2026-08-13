@@ -1,12 +1,4 @@
-<div style="text-align:center; white-space:nowrap;">
-
-# Tic Tac Toe
-
-**A self-playing, microservice-based Tic Tac Toe game** — the board fills itself in real time while a service orchestrator plays random moves against the game engine.
-
-<a href="https://github.com/andrey56097/tik-tak-toe/actions/workflows/ci.yml"><img src="https://github.com/andrey56097/tik-tak-toe/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" style="height:28px;margin:0 6px;vertical-align:middle;"></a><img src="https://img.shields.io/badge/Java-21-%23E34F26?style=for-the-badge&logo=openjdk&logoColor=white" alt="Java" style="height:28px;margin:0 6px;vertical-align:middle;"><img src="https://img.shields.io/badge/Spring%20Boot-4.1.0-%236DB33F?style=for-the-badge&logo=spring&logoColor=white" alt="Spring Boot" style="height:28px;margin:0 6px;vertical-align:middle;"><img src="https://img.shields.io/badge/Spring%20Cloud-2025.1.2-%236DB33F?style=for-the-badge&logo=spring&logoColor=white" alt="Spring Cloud" style="height:28px;margin:0 6px;vertical-align:middle;"><img src="https://img.shields.io/badge/Gradle-9.x-%2302303A?style=for-the-badge&logo=gradle&logoColor=white" alt="Gradle" style="height:28px;margin:0 6px;vertical-align:middle;"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="License" style="height:28px;margin:0 6px;vertical-align:middle;">
-
-</div>
+<div style="text-align:center; white-space:nowrap;"> <a href="https://github.com/andrey56097/tik-tak-toe/actions/workflows/ci.yml"><img src="https://github.com/andrey56097/tik-tak-toe/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" style="height:22px;margin:0 2px;vertical-align:middle;"></a><img src="https://img.shields.io/badge/Java-21-%23E34F26?style=for-the-badge&logo=openjdk&logoColor=white" alt="Java" style="height:22px;margin:0 2px;vertical-align:middle;"><img src="https://img.shields.io/badge/Spring%20Boot-4.1.0-%236DB33F?style=for-the-badge&logo=spring&logoColor=white" alt="Spring Boot" style="height:22px;margin:0 2px;vertical-align:middle;"><img src="https://img.shields.io/badge/Spring%20Cloud-2025.1.2-%236DB33F?style=for-the-badge&logo=spring&logoColor=white" alt="Spring Cloud" style="height:22px;margin:0 2px;vertical-align:middle;"><img src="https://img.shields.io/badge/Gradle-9.x-%2302303A?style=for-the-badge&logo=gradle&logoColor=white" alt="Gradle" style="height:22px;margin:0 2px;vertical-align:middle;"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="License" style="height:22px;margin:0 2px;vertical-align:middle;"> </div>
 
 ---
 <div style="text-align:center;">
@@ -137,6 +129,6 @@ flowchart TB
 3. The **Game Session Service** orchestrates a whole game: it calls its own move strategy and submits each move over **REST** (the move endpoint creates the game on first use), recording the fres[...]
 4. The **Game Engine Service** owns the rules: move validation, winner detection, and persistence to **H2**.
 
-> A full game-cycle sequence diagram is in the [implementation plan](docs/tic-tac-toe-plan.md#one-game-cycle-sequence).
+---
 
-... (file unchanged below)
+... (rest of file unchanged)
