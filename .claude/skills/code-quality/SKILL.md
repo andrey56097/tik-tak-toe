@@ -58,6 +58,32 @@ Operationalizes the code-quality standards from the project `CLAUDE.md`. Use thi
 - [ ] Actuator (`health,info`) on every service.
 - [ ] Bean Validation on request DTOs (`@Valid` + jakarta annotations); ranges constrained (`@Min` / `@Max`).
 
+### 7. Lifecycle & limits
+
+TDD produces exactly what a test asserts, and no test fails because a map has no
+eviction policy. This section is the one dimension of the checklist that a green
+suite cannot vouch for — so it is checked by reading, deliberately, every time.
+
+- [ ] **Anything this change stores** — map, cache, registry, list held in a field:
+      who removes entries, and when? "Nothing" is a defect, not a simplification.
+- [ ] **Anything this change opens** — stream, emitter, subscription, connection:
+      closed on *every* exit path, including the error and exception ones.
+- [ ] **Anything this change starts** — background task, async call, loop: is there
+      a ceiling on how many can run at once? Virtual threads raise the ceiling;
+      they do not create one.
+- [ ] **Anything this change calls** — connect *and* read timeout set; loops that
+      talk to another system have an iteration cap.
+- [ ] **Anything this change accepts** — an endpoint that creates state needs a
+      limit, and an honest rejection (503/429) when it is reached, rather than
+      accepting work until the JVM dies.
+- [ ] **If this fails in production** — is there a metric, a log line with the
+      correlating id, or a trace? Code that can only be diagnosed with a debugger
+      is not done, however well it is tested.
+
+> The whole-repo version of this check, plus the four dimensions that are
+> invisible from inside a single diff, live in the `sweep` skill — run at
+> completion points, not per task.
+
 ## When done
 
 - [ ] All applicable checks pass.
