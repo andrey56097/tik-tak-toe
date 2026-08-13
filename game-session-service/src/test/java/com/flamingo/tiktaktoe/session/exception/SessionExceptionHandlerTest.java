@@ -12,6 +12,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -64,6 +65,27 @@ class SessionExceptionHandlerTest {
                 .andExpect(jsonPath("$.status").value(405))
                 .andExpect(jsonPath("$.error").value("Method Not Allowed"))
                 .andExpect(jsonPath("$.path").value("/sessions/abc"));
+    }
+
+    /**
+     * This service used to answer 405 without an {@code Allow} header while the
+     * Engine sent one — the same client mistake got two different answers
+     * depending on which service received it. Both now inherit one
+     * implementation, and this is the assertion that keeps it that way.
+     */
+    @Test
+    void unsupportedMethod_carriesAnAllowHeaderLikeTheEngineDoes() throws Exception {
+        mockMvc.perform(put("/sessions/abc"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(header().exists("Allow"))
+                .andExpect(header().string("Allow", org.hamcrest.Matchers.containsString("GET")));
+    }
+
+    /** The 405 body carries a fixed message, never the exception's own text. */
+    @Test
+    void unsupportedMethod_doesNotLeakTheExceptionMessage() throws Exception {
+        mockMvc.perform(put("/sessions/abc"))
+                .andExpect(jsonPath("$.message").value("Method not allowed"));
     }
 
     @Test

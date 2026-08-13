@@ -14,7 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.retry.annotation.EnableRetry;
+import org.springframework.resilience.annotation.EnableResilientMethods;
 import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
@@ -29,11 +29,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Proves {@link RestGameEngineClient}'s {@code @Retryable} policy through a
- * real Spring AOP proxy ({@code @EnableRetry} + {@code @SpringJUnitConfig},
+ * real Spring AOP proxy ({@code @EnableResilientMethods} + {@code @SpringJUnitConfig},
  * NOT a full {@code @SpringBootTest}) talking to a real HTTP endpoint (okhttp
  * MockWebServer). A 2xx response deserializes to {@link GameState} and is not
  * retried; 4xx responses must NOT be retried; transient failures (5xx,
- * connect-refused) must be retried up to {@code maxAttempts=3}.
+ * connect-refused) must be retried up to three attempts in total.
  *
  * <p>The single shared MockWebServer is started in a static initializer —
  * before the context loads — so the {@code RestClient} bean's base URL can
@@ -71,8 +71,17 @@ class RestGameEngineClientRetryTest {
     @Autowired
     private GameEngineClient client;
 
+    // @EnableResilientMethods, not spring-retry's @EnableRetry: Milestone 10 moved
+    // this client onto Spring Framework 7's own @Retryable. Only the annotation that
+    // switches the mechanism on changed — every assertion below (request counts,
+    // exception types, which statuses are retried) is untouched, which is what makes
+    // this class the parity harness for that migration.
     @Configuration
-    @EnableRetry
+    // proxyTargetClass = true is load-bearing, not a style preference. See
+    // AsyncConfig for the whole story: with a JDK dynamic proxy, Spring Framework
+    // 7's @Retryable on an implementation method is silently ignored, and this
+    // harness measured exactly one attempt where three were required.
+    @EnableResilientMethods(proxyTargetClass = true)
     static class RetryConfig {
 
         @Bean

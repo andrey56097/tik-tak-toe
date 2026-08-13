@@ -24,6 +24,17 @@ eureka:
 session:
   simulation:
     move-delay-ms: 1000
+    # Hard admission (tryAcquire → 503), not a wait queue: each in-flight simulation
+    # holds a session record, an Engine game, and maybe an SSE emitter.
+    max-concurrent: 50
+  store:
+    # Long enough for a browser to fetch the result and an operator to look. Without
+    # it the map only grew: every session ever created stayed until a restart.
+    terminal-retention-ms: 900000   # 15 min
+    sweep-interval-ms: 60000        # 1 min
+    # Hard ceiling on stored sessions. Reaching it means creates are faster than
+    # finishes; answering 503 is better than running out of heap.
+    max-sessions: 10000
   stream:
     # 2 min is comfortably above the worst-case game: 9 moves × 1s delay
     # + 9 Engine round-trips + @Retryable's 3 attempts at 5s read timeout each.
@@ -39,4 +50,21 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics,prometheus
+  # Prometheus is scraped, not pushed, so the stack needs no external service to
+  # run. Datadog later would be a registry swap, not a rewrite.
+  tracing:
+    sampling:
+      # A development setting: a sampled-away trace is useless when the point is to
+      # follow one session end to end. Lower it when traffic is real.
+      probability: 1.0
+  otlp:
+    tracing:
+      # Empty by default, so no collector has to exist for the stack to come up.
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:}
+
+logging:
+  pattern:
+    # The ids that let a line in one service be joined to the line it caused in the other.
+    level: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]"
+

@@ -21,10 +21,18 @@ repositories {
 }
 
 dependencies {
-    implementation("org.springframework.boot:spring-boot-starter-web")
-    implementation("org.springframework.boot:spring-boot-starter-websocket")
+    // starter-webmvc, matching the engine. Note there is no starter-websocket
+    // here: Milestone 5 chose SSE, which is plain HTTP, and the dependency sat
+    // unused until Milestone 10 removed it — the same one Milestone 4 had already
+    // removed from ui-service for the same reason.
+    implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation(project(":common"))
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    // Versions omitted deliberately: all three are managed by the Spring Boot BOM
+    // (verified 2026-08-13 — prometheus 1.17.0, tracing-bridge-otel 1.7.0, otlp 1.62.0).
+    implementation("io.micrometer:micrometer-registry-prometheus")
+    implementation("io.micrometer:micrometer-tracing-bridge-otel")
+    implementation("io.opentelemetry:opentelemetry-exporter-otlp")
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.0")
     implementation("org.springframework.cloud:spring-cloud-starter-netflix-eureka-client")
     // Eureka's HTTP request factory (defaultEurekaClientHttpRequestFactorySupplier) needs
@@ -32,17 +40,11 @@ dependencies {
     // <optional>, so Gradle does not reliably propagate it (the engine module only gets it
     // by accident of a different transitive path). Declare it explicitly so Eureka boots.
     runtimeOnly("org.apache.httpcomponents.client5:httpclient5")
-    // @Retryable on RestGameEngineClient.makeMove. spring-retry is not covered by the
-    // Spring Boot BOM, so its version is pinned explicitly. @EnableRetry (used by this
-    // part's retry test, and by AsyncConfig in Part C) is meta-annotated with
-    // @EnableAspectJAutoProxy, which registers AnnotationAwareAspectJAutoProxyCreator;
-    // that class's static init touches org.aspectj.weaver.Advice whether or not any
-    // AspectJ pointcut is used, so aspectjweaver must be on the runtime classpath or
-    // the context fails to refresh with NoClassDefFoundError. Runtime-only is enough —
-    // nothing is woven here. Note `spring-boot-starter-aop` does not exist for Boot 4.x
-    // (last published at 4.0.0-M2); aspectjweaver's version IS BOM-managed.
-    implementation("org.springframework.retry:spring-retry:2.0.13")
-    runtimeOnly("org.aspectj:aspectjweaver")
+    // Retry is Spring Framework 7's own @Retryable (org.springframework.resilience),
+    // enabled by @EnableResilientMethods in AsyncConfig. It replaced a hand-pinned
+    // spring-retry plus a runtimeOnly aspectjweaver that existed only to keep
+    // @EnableRetry's AspectJ proxy creator from failing at class-init — CLAUDE.md
+    // asks for the framework's built-in, and this is it.
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     // MockWebServer (okhttp 4.x) — backs RestGameEngineClientRetryTest's real HTTP endpoint.
@@ -161,12 +163,12 @@ pitest {
     targetClasses.set(setOf("com.flamingo.tiktaktoe.session.*"))
     // Excluded because Pitest mutates method *bodies*, and what these classes
     // decide lives in annotations: which RestClient.Builder is @Primary, which is
-    // @LoadBalanced, which origins CorsConfig allows. Those decisions are
-    // load-bearing — getting the first one wrong silently breaks this service's
-    // Eureka registration — but no body mutant can express them, so including
-    // the package would only measure "return null instead of the bean". The real
-    // gate for them is RestClientConfigTest and CorsConfigTest, which assert the
-    // resulting behaviour against a booted context.
+    // @LoadBalanced. Those decisions are load-bearing — getting the first one
+    // wrong silently breaks this service's Eureka registration — but no body
+    // mutant can express them, so including the package would only measure
+    // "return null instead of the bean". The real gate for them is
+    // RestClientConfigTest, which asserts the resulting behaviour against a
+    // booted context.
     excludedClasses.set(setOf("com.flamingo.tiktaktoe.session.config.*"))
     outputFormats.set(setOf("XML", "HTML"))
     timestampedReports.set(false)

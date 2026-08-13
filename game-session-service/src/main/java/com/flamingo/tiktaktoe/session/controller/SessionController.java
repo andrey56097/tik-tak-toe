@@ -49,12 +49,13 @@ public class SessionController {
      * players"); there is nothing for a caller to configure.
      *
      * @return 201 Created with the new session's record ({@code CREATED},
-     * no game state yet)
+     * no game state yet); 503 when the session store is at capacity
      */
     @Operation(summary = "Create a new auto-play session",
             description = "Returns a CREATED session with a fresh session id; no body required.")
     @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Session created and returned")
+            @ApiResponse(responseCode = "201", description = "Session created and returned"),
+            @ApiResponse(responseCode = "503", description = "Session store is at capacity; try again later")
     })
     @PostMapping
     public ResponseEntity<SessionResponse> createSession() {
@@ -66,21 +67,22 @@ public class SessionController {
      * Kicks off the auto-play simulation for a {@code CREATED} session. The
      * simulation itself runs on a background thread (see {@link
      * GameSessionOrchestrator#simulate(String)}); this call only performs
-     * the synchronous not-found/already-started checks before returning, so
-     * 202 Accepted is the accurate status here — the request is accepted for
-     * background processing, not completed.
+     * hard admission and the synchronous not-found/already-started checks
+     * before returning, so 202 Accepted is the accurate status here — the
+     * request is accepted for background processing, not completed.
      *
      * @param sessionId the session to simulate
      * @return 202 Accepted (empty body) once the background run has been
-     * kicked off; the not-found/conflict cases are translated to 404/409 by
-     * {@link com.flamingo.tiktaktoe.session.exception.SessionExceptionHandler}
+     * kicked off; not-found/conflict → 404/409; no simulation slots → 503
+     * via {@link com.flamingo.tiktaktoe.session.exception.SessionExceptionHandler}
      */
     @Operation(summary = "Start the auto-play simulation for a session",
             description = "Synchronously validates the session is CREATED, then kicks off the background simulation; returns 202.")
     @ApiResponses({
             @ApiResponse(responseCode = "202", description = "Simulation accepted and running in the background"),
             @ApiResponse(responseCode = "404", description = "No session with the given id exists"),
-            @ApiResponse(responseCode = "409", description = "Session is not in a startable (CREATED) state")
+            @ApiResponse(responseCode = "409", description = "Session is not in a startable (CREATED) state"),
+            @ApiResponse(responseCode = "503", description = "No concurrent simulation slots available; try again later")
     })
     @PostMapping("/{sessionId}/simulate")
     public ResponseEntity<Void> simulate(@PathVariable String sessionId) {

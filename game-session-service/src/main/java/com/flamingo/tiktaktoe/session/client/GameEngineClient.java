@@ -4,25 +4,21 @@ import com.flamingo.tiktaktoe.common.GameState;
 import com.flamingo.tiktaktoe.common.MoveRequest;
 
 /**
- * Port to the Game Engine service. Small and focused (ISP) — callers depend on
- * this abstraction only, never on the transport used to reach Engine, so the
- * transport can be swapped or mocked freely.
+ * Port to the Game Engine. Callers depend on this, never on the transport, so it
+ * can be swapped or mocked freely.
  *
- * <p>Only {@code makeMove} is exposed: {@code SessionSimulationRunner} starts
- * from a locally built board ({@code GameStateFactory.empty}) and Engine's move
- * endpoint upserts a fresh game, so no separate "create" or "get" round-trip is
- * needed during normal simulation. YAGNI — do not add methods without a real
- * caller.
+ * <p>Only {@code makeMove} is exposed: the runner starts from a locally built
+ * board and Engine's move endpoint upserts, so no create or get round-trip is
+ * needed. YAGNI — do not add methods without a caller.
  */
 public interface GameEngineClient {
 
     /**
-     * Submits a move for the given game, creating the game first if it does
-     * not yet exist (Engine's {@code POST /games/{gameId}/move} is upsert-capable).
+     * Submits a move, creating the game if the id is unknown (the Engine endpoint
+     * is an upsert).
      *
-     * @param gameId the game id (equal to the owning session's id)
-     * @param move   the move to submit
-     * @return the game's state after the move has been applied
+     * @param gameId the game id, equal to the owning session's id
+     * @return the game's state after the move
      */
     GameState makeMove(String gameId, MoveRequest move);
 }
