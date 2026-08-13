@@ -4,6 +4,7 @@ import com.flamingo.tiktaktoe.common.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -71,6 +72,43 @@ public class GameExceptionHandler {
                                                                 HttpServletRequest request) {
         return errorResponse(HttpStatus.CONFLICT,
                 "Game was updated concurrently; retry the move", request);
+    }
+
+    /**
+     * Two moves raced on a <em>brand-new</em> game and this one lost the race to
+     * create it: both read "no game", both tried to {@code INSERT}, and the
+     * loser hit the primary-key constraint. Like a {@code @Version} loss, the
+     * write conflicted because the client raced another write — nothing is
+     * broken server-side, so it is a 409, not a 500.
+     *
+     * <p><strong>Scoped deliberately narrow.</strong> Not every integrity
+     * violation is a create race: a NOT-NULL or length violation means the
+     * service wrote something wrong and deserves a 500 (surfaced to the log),
+     * not a "retry the move" that can never succeed. The two are told apart by
+     * the SQLState — {@code 23505} is the standard "unique constraint
+     * violated", which is exactly what a PK/unique race produces; anything
+     * else falls through to the generic 500 so a genuine bug is not masked.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleIntegrityViolation(DataIntegrityViolationException ex,
+                                                                  HttpServletRequest request) {
+        if (isUniqueConstraintViolation(ex)) {
+            return errorResponse(HttpStatus.CONFLICT,
+                    "Game was created concurrently; retry the move", request);
+        }
+        log.error("Unexpected data integrity violation on {}", request.getRequestURI(), ex);
+        return errorResponse(HttpStatus.INTERNAL_SERVER_ERROR, GENERIC_SERVER_ERROR, request);
+    }
+
+    private static boolean isUniqueConstraintViolation(DataIntegrityViolationException ex) {
+        Throwable cause = ex.getMostSpecificCause();
+        if (cause instanceof java.sql.SQLException sql && "23505".equals(sql.getSQLState())) {
+            return true;
+        }
+        // Hibernate can hide the SQLException's SQLState; fall back to the text H2
+        // emits for a PK/unique race.
+        String message = cause.getMessage();
+        return message != null && message.contains("Unique index or primary key violation");
     }
 
     /**

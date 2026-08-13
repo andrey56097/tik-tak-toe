@@ -5,13 +5,17 @@ import com.flamingo.tiktaktoe.common.CellState;
 import com.flamingo.tiktaktoe.common.MoveRequest;
 import com.flamingo.tiktaktoe.engine.controller.GameController;
 import com.flamingo.tiktaktoe.engine.service.GameEngineService;
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+
+import java.sql.SQLException;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -107,6 +111,47 @@ class GameExceptionHandlerTest {
                 .andExpect(jsonPath("$.status").value(409))
                 .andExpect(jsonPath("$.error").value("Conflict"))
                 .andExpect(jsonPath("$.path").value("/games/" + GAME_ID + "/move"));
+    }
+
+    @Test
+    void createRaceLosingOnPrimaryKey_returns409ErrorResponse() throws Exception {
+        // Two requests raced to create the same game; the loser's INSERT hit the
+        // primary-key constraint. Same conflict semantics as the @Version loss —
+        // a 409, not a 500. The exception chain mirrors what H2/Hibernate actually
+        // produce (SQLState 23505 = unique/PK violation).
+        SQLException sql = new SQLException("Unique index or primary key violation", "23505");
+        ConstraintViolationException cv = new ConstraintViolationException(
+                "could not execute statement", sql, "insert into game_entity ...");
+        when(service.makeMove(eq(GAME_ID), any(MoveRequest.class)))
+                .thenThrow(new DataIntegrityViolationException("could not execute statement", cv));
+
+        mockMvc.perform(post("/games/{id}/move", GAME_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(moveJson()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.error").value("Conflict"))
+                .andExpect(jsonPath("$.message").value("Game was created concurrently; retry the move"))
+                .andExpect(jsonPath("$.path").value("/games/" + GAME_ID + "/move"));
+    }
+
+    @Test
+    void nonUniqueIntegrityViolation_returns500WithoutLeakingInternals() throws Exception {
+        // NOT-NULL (SQLState 23502) is not a create race — the service wrote
+        // something wrong, so it must NOT be masked as a retry-able 409.
+        SQLException sql = new SQLException("NULL not allowed for column \"BOARD\"", "23502");
+        ConstraintViolationException cv = new ConstraintViolationException(
+                "could not execute statement", sql, "insert into game_entity ...");
+        when(service.makeMove(eq(GAME_ID), any(MoveRequest.class)))
+                .thenThrow(new DataIntegrityViolationException("could not execute statement", cv));
+
+        mockMvc.perform(post("/games/{id}/move", GAME_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(moveJson()))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.status").value(500))
+                .andExpect(jsonPath("$.error").value("Internal Server Error"))
+                .andExpect(jsonPath("$.message").value("Internal server error"));
     }
 
     @Test
