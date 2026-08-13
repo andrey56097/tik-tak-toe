@@ -1,4 +1,4 @@
-<div style="text-align:center; white-space:nowrap;"> <a href="https://github.com/andrey56097/tik-tak-toe/actions/workflows/ci.yml"><img src="https://github.com/andrey56097/tik-tak-toe/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" style="height:22px;margin:0 2px;vertical-align:middle;"></a><img src="https://img.shields.io/badge/Java-21-%23E34F26?style=for-the-badge&logo=openjdk&logoColor=white" alt="Java" style="height:22px;margin:0 2px;vertical-align:middle;"><img src="https://img.shields.io/badge/Spring%20Boot-4.1.0-%236DB33F?style=for-the-badge&logo=spring&logoColor=white" alt="Spring Boot" style="height:22px;margin:0 2px;vertical-align:middle;"><img src="https://img.shields.io/badge/Spring%20Cloud-2025.1.2-%236DB33F?style=for-the-badge&logo=spring&logoColor=white" alt="Spring Cloud" style="height:22px;margin:0 2px;vertical-align:middle;"><img src="https://img.shields.io/badge/Gradle-9.x-%2302303A?style=for-the-badge&logo=gradle&logoColor=white" alt="Gradle" style="height:22px;margin:0 2px;vertical-align:middle;"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="License" style="height:22px;margin:0 2px;vertical-align:middle;"> </div>
+<div style="text-align:center; white-space:nowrap;"> <a href="https://github.com/andrey56097/tik-tak-toe/actions/workflows/ci.yml"><img src="https://github.com/andrey56097/tik-tak-toe/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" style="height:22px;margin:0 1px;vertical-align:middle;"></a><img src="https://img.shields.io/badge/Java-21-%23E34F26?style=for-the-badge&logo=openjdk&logoColor=white" alt="Java" style="height:22px;margin:0 1px;vertical-align:middle;"><img src="https://img.shields.io/badge/Spring%20Boot-4.1.0-%236DB33F?style=for-the-badge&logo=spring&logoColor=white" alt="Spring Boot" style="height:22px;margin:0 1px;vertical-align:middle;"><img src="https://img.shields.io/badge/Spring%20Cloud-2025.1.2-%236DB33F?style=for-the-badge&logo=spring&logoColor=white" alt="Spring Cloud" style="height:22px;margin:0 1px;vertical-align:middle;"><img src="https://img.shields.io/badge/Gradle-9.x-%2302303A?style=for-the-badge&logo=gradle&logoColor=white" alt="Gradle" style="height:22px;margin:0 1px;vertical-align:middle;"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="License" style="height:22px;margin:0 1px;vertical-align:middle;"> </div>
 
 ---
 <div style="text-align:center;">
@@ -122,13 +122,5 @@ flowchart TB
     Gateway -.->|discover| Eureka
 ```
 
-**How the pieces fit together:**
-
-1. The **browser** talks only to the **gateway** (`:8080`) — it never knows internal service ports.
-2. The gateway routes requests **by service name** (`lb://GAME-SESSION-SERVICE`, …) using addresses it discovers from **Eureka**.
-3. The **Game Session Service** orchestrates a whole game: it calls its own move strategy and submits each move over **REST** (the move endpoint creates the game on first use), recording the fres[...]
-4. The **Game Engine Service** owns the rules: move validation, winner detection, and persistence to **H2**.
-
 ---
 
-... (rest of file unchanged)
