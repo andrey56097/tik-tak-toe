@@ -2,6 +2,7 @@ plugins {
     java
     id("org.springframework.boot") version "4.1.0"
     id("io.spring.dependency-management") version "1.1.7"
+    jacoco
     id("info.solidsoft.pitest") version "1.19.0"
 }
 
@@ -55,15 +56,106 @@ dependencyManagement {
     }
 }
 
+// --- integrationTest source set -------------------------------------------------
+// Session↔Engine integration tests need game-engine-service on the classpath, and
+// the engine's src/main/resources/application.yml sits at exactly the same
+// classpath location as this service's own (classpath:/application.yml). Spring
+// Boot resolves that location to ONE resource, so putting the engine module on the
+// ordinary `test` classpath would make the winner depend on classpath ordering —
+// and would newly apply JPA/H2 auto-configuration to all existing session tests.
+// A separate source set leaves the `test` classpath byte-for-byte unchanged.
+sourceSets {
+    create("integrationTest")
+}
+
+val integrationTestSourceSet = sourceSets["integrationTest"]
+integrationTestSourceSet.compileClasspath += sourceSets["main"].output
+
+// The runtime classpath is assigned in full rather than appended to, because its
+// ORDER decides which application.yml the Session context reads and Gradle's
+// default order gets it wrong. The default is
+// `output + integrationTestRuntimeClasspath`, with this service's own main output
+// appended last — behind the engine module. Spring Boot then resolves
+// classpath:/application.yml to the ENGINE's file, and the Session context boots
+// as "game-engine-service" with no engine.client.* properties at all (verified:
+// PlaceholderResolutionException on ${engine.client.base-url}). Putting this
+// service's own output ahead of its dependencies makes the Session configuration
+// win deterministically instead of by luck.
+integrationTestSourceSet.runtimeClasspath = integrationTestSourceSet.output +
+        sourceSets["main"].output +
+        configurations["integrationTestRuntimeClasspath"]
+
+configurations["integrationTestImplementation"].extendsFrom(configurations["testImplementation"])
+configurations["integrationTestRuntimeOnly"].extendsFrom(configurations["testRuntimeOnly"])
+
+dependencies {
+    // Integration-test scope ONLY. The production dependency graph must not change:
+    // no service may start depending on another service's code.
+    "integrationTestImplementation"(project(":game-engine-service"))
+}
+
 tasks.named<Test>("test") {
     useJUnitPlatform()
 }
 
+tasks.register<Test>("integrationTest") {
+    description = "Runs the Session↔Engine integration tests, with both services really running."
+    group = "verification"
+    testClassesDirs = sourceSets["integrationTest"].output.classesDirs
+    classpath = sourceSets["integrationTest"].runtimeClasspath
+    useJUnitPlatform()
+    // Two Spring Boot contexts and several HTTP servers per class — never race the
+    // unit suite for ports.
+    shouldRunAfter(tasks.named("test"))
+}
+
+// Coverage is measured over BOTH suites: the integration tests exercise the
+// production code too, so excluding them would understate real coverage.
+// Neither `test` nor `integrationTest` is wired as a finalizer of the report:
+// the coverage tasks are reached through `check`, which runs both suites first,
+// and a bare `./gradlew test` must stay a fast unit-only run.
+tasks.named<JacocoReport>("jacocoTestReport") {
+    dependsOn(tasks.named<Test>("test"))
+    dependsOn(tasks.named<Test>("integrationTest"))
+    executionData.setFrom(
+        fileTree(layout.buildDirectory).matching {
+            include("jacoco/test.exec", "jacoco/integrationTest.exec")
+        }
+    )
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+    }
+}
+
+tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
+    dependsOn(tasks.named("jacocoTestReport"))
+    executionData.setFrom(
+        fileTree(layout.buildDirectory).matching {
+            include("jacoco/test.exec", "jacoco/integrationTest.exec")
+        }
+    )
+    violationRules {
+        rule {
+            limit {
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = "0.80".toBigDecimal()
+            }
+        }
+    }
+}
+
 tasks.named("check") {
+    dependsOn(tasks.named("integrationTest"))
+    dependsOn(tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification"))
     dependsOn(tasks.named("pitest"))
 }
 
 pitest {
+    // Deliberately left on the default testSourceSets = [test]. Mutation analysis
+    // stays on the fast unit tests; running it against the integration suite would
+    // boot two Spring contexts per mutant, which is untenable. Do not "fix" this.
     junit5PluginVersion.set("1.2.1")
     pitestVersion.set("1.22.1")
     targetClasses.set(setOf("com.flamingo.tiktaktoe.session.*"))
