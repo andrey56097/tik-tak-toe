@@ -28,8 +28,10 @@ suggestions — they are the acceptance criteria for all implementation work.
 
 ### DRY, KISS, YAGNI
 
-- **DRY:** no copy-paste. Shared DTOs/constants between Engine and Session live in the `common` module, pulled in as a dependency — never duplicated across services.
+- **DRY:** no copy-paste. Shared DTOs/constants between Engine and Session live in the `common` module, pulled in as a dependency — never duplicated across services. `common` also owns `AbstractRestExceptionHandler`, the service-agnostic half of the error handling; its Spring MVC dependencies are `compileOnly` so the module stays usable by a non-web consumer.
 - **KISS:** simplest thing that works. Don't add a message broker when REST suffices. Don't abstract something with no second implementation "on the horizon".
+- **Keep workflow methods shallow:** a public orchestration method should read as a sequence of named phases. When it combines decisions, external calls, persistence, metrics, or terminal-state handling, extract cohesive private methods; do not create a new class unless that responsibility has an independent collaborator or lifecycle.
+- **Comment intent, not narration:** keep a short comment at a non-obvious invariant, framework constraint, concurrency boundary, or deliberately surprising ordering. Explain *why* it exists; do not restate the code, recount development history, or document routine control flow.
 - **YAGNI:** don't build for imagined future needs. Extensibility is achieved by *clean interfaces and seams*, not by speculative features.
 
 ### Extensibility — the DB *will* change on prod
@@ -166,7 +168,7 @@ The system is a **Tic Tac Toe** — five independent Spring Boot services plus o
 | Game Engine | `game-engine-service/` | 8081 | `GAME-ENGINE-SERVICE` |
 | Game Session (orchestrator) | `game-session-service/` | 8082 | `GAME-SESSION-SERVICE` |
 | UI | `ui-service/` | 8083 | `UI-SERVICE` |
-| Shared DTOs | `common/` | — | — |
+| Shared DTOs + error contract | `common/` | — | — |
 
 How the services talk:
 

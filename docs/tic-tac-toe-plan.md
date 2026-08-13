@@ -14,7 +14,7 @@
 | Game state storage (Engine) | **H2 (in-memory mode)** — via Spring Data JPA |
 | Session state storage (Session) | **In-memory** (`ConcurrentHashMap`) for session + move history (KISS); Engine remains the persistent source of game state |
 | Session ↔ Engine communication | REST via **`RestClient`** (`@LoadBalanced`, connect+read timeouts) on the Session→Engine boundary |
-| Session → UI communication | **Polling first** (`GET /sessions/{id}`, Milestone 4), then **SSE** push (Milestone 5). The traffic is strictly one-way (server → browser), which is exactly SSE's shape: native `EventSource`, zero JS libraries, automatic reconnect, and `Last-Event-ID` replay. WebSocket + STOMP was the earlier choice and is kept as the documented alternative — see *Possible future improvements* |
+| Session → UI communication | **Polling first** (`GET /sessions/{id}`, Milestone 4), then **SSE** push (Milestone 5). The traffic is strictly one-way (server → browser), which is exactly SSE's shape: native `EventSource`, zero JS libraries and automatic reconnect. WebSocket + STOMP was the earlier choice and is kept as the documented alternative — see *Possible future improvements* |
 | Move strategy (v1) | Random move (simple implementation) |
 | Testing (unit) | JUnit 5 + Mockito |
 | Testing (integration) | Spring Boot Test, `@SpringBootTest`, `MockWebServer`, Testcontainers (optional) |
@@ -433,8 +433,8 @@ SSE is the only push option that *could* have avoided a new URL.
 **Why SSE rather than WebSocket + STOMP:** after "Start" the browser sends the
 server nothing — the start itself is an ordinary `POST /sessions/{id}/simulate`.
 The channel is strictly one-way, which is exactly what SSE is for: native
-`EventSource`, **zero** JS libraries to vendor, automatic reconnect, and
-`Last-Event-ID` replay of events missed during a drop. WebSocket is a
+`EventSource`, **zero** JS libraries to vendor and automatic reconnect.
+WebSocket is a
 bidirectional transport plus a message broker plus two JS libraries, solving a
 problem this system does not have. The comparison itself is a deliverable —
 `task.md` line 89 invites a discussion of alternative designs, so it goes in the
@@ -445,7 +445,7 @@ README.
 - [x] **Send the current state as the very first event on subscribe** — a client attaching mid-game must not stare at an empty board until the next move. Same payload as `GET /sessions/{id}`
 - [x] Support multiple subscribers per session (registry is `sessionId` → collection of emitters)
 - [x] Publish an event after every applied move, carrying the same `SessionResponse` the polling endpoint returns — so `render(state)` is untouched
-- [x] Set an event id per move so `Last-Event-ID` can replay what was missed after a reconnect
+- [x] Set an event id per move. Note this is **not** replay: the server never reads `Last-Event-ID` and holds no event buffer. It does not need to — every event carries the full `SessionResponse`, so a reconnecting client is made current by the next event rather than by re-receiving the ones it missed. (The original wording here promised replay; the audit found the promise, not the feature.)
 - [x] **Signal termination explicitly** with a named `done` event, then complete the emitter. `EventSource` **auto-reconnects when a stream closes**, so completing silently on `WIN`/`DRAW` would make the browser reopen the connection in a loop; the client must call `eventSource.close()` on `done`
 - [x] Emitter timeout comfortably above the worst-case game (9 × `move-delay-ms` + Engine round-trips and retries)
 - [x] Evict emitters on completion, timeout, error and client disconnect (`onCompletion`/`onTimeout`/`onError`) — otherwise the registry leaks
@@ -525,14 +525,44 @@ This milestone closes the assignment's **"Testing & Validation"** section entire
 ---
 
 ### Milestone 10 — Final polish and Submission Guidelines *(**required** — `task.md` submission checklist)*
+
+Driven by a whole-repository audit rather than a checklist: 19 findings, all in code
+that had already passed TDD, a reviewer subagent, an 80 % mutation gate and the
+`code-quality` checklist. Three of them broke rules that checklist already contained,
+which is a finding about the process — see `.claude/skills/sweep/SKILL.md`. Full task
+breakdown in `.claude/plans/milestone-10-polish-and-observability.md`.
 - [x] README.md: architecture, diagrams, run instructions (`docker-compose up`), test instructions (`./gradlew test`) — landed incrementally with the milestones that created each path (Architecture + mermaid diagrams, Run with Docker / on Kubernetes / from source, Test + a Gradle task reference, API Surface, CI). Milestone 10 re-reads it end to end rather than writing it from scratch
-- [ ] Code style check / comments in key places (validation, orchestration, error handling) — under "adheres to Spring Boot best practices"
+- [x] Code style check / comments in key places (validation, orchestration, error handling) — a pass over the milestone's own comments cut the long-form ones back to the decision they record; the load-bearing ones (why `proxyTargetClass` is required, why the concurrency limit sits inside `@Async`, why `common` carries web types as `compileOnly`) stay
 - [x] A "Possible improvements / alternative approaches" section in the README (optional per the assignment, but easily covered with 5–6 items: minimax, message broker, persistent H2 instead of in-memory, multiple parallel game sessions, etc.) — README §Possible Improvements, split into *Known gaps* (the debt each milestone reported rather than fixed) and *Optional direction*
-- [ ] Final end-to-end run of the full game cycle several times in a row
+- [x] Final end-to-end run of the full game cycle several times in a row — three consecutive `scripts/smoke.sh` runs against a freshly built `docker compose` stack: WIN X (9 moves), WIN O (8), DRAW (9), all through the Gateway on 8080
 - [x] (optional) Retry via built-in `@Retryable` (Spring Boot 4) on Session → Engine calls; a Circuit Breaker via `resilience4j-spring-boot4` if needed — `@Retryable` on `RestGameEngineClient`, transient failures only (4xx explicitly excluded, since retrying a 409 is a bug); no circuit breaker, which nothing here has needed
-- [ ] (optional) Logging with `gameId`/`sessionId` in MDC
+- [x] (optional) Correlated logging via OpenTelemetry — the log pattern of both services carries `traceId`/`spanId` from Micrometer Tracing; custom MDC context was deliberately omitted because the runner already logs its `sessionId` explicitly
 
 **Result:** the project is ready for submission — code, tests, documentation, demo.
+
+**Verified on 2026-08-13.** `./gradlew build --continue` green across all six modules.
+Mutation gates: `common` 100 %, `game-engine-service` 95 %, `game-session-service` 95 %
+(all above the 80 % floor); 18 Vitest tests over the static page, which had none before.
+Three consecutive full games through a freshly built `docker compose` stack: WIN X (9),
+WIN O (8), DRAW (9). Metrics read off the running containers —
+`tiktaktoe_simulation_moves_total`, `tiktaktoe_simulation_seconds{outcome="completed"}`,
+`tiktaktoe_games_total`, `tiktaktoe_moves_applied_total{status=…}`.
+
+**Not verified, and not claimed:** a single trace id appearing in *both* services' logs
+for one game. Successful requests produce no application log lines, so there was nothing
+to correlate by eye. What is proven is the mechanism underneath it — the outbound client
+publishes `http.client.requests`, which is what puts `traceparent` on the wire, and
+`TracePropagationIT` fails if that instrumentation is missing.
+
+**Two defects this milestone found that no existing test would have caught:**
+- The outbound `RestClient` was not instrumented at all, because `RestClientConfig`
+  builds it from a bare `RestClient.builder()` for a documented Eureka reason. No client
+  spans, and no `traceparent` header — tracing would have been configured and dead.
+- Spring Framework 7's `@Retryable` is silently ignored under a JDK dynamic proxy: the
+  policy is resolved from the interface method, where the annotation is not. The bean is
+  still a proxy, nothing errors, and a transient failure is simply attempted once instead
+  of three times. `@EnableResilientMethods(proxyTargetClass = true)` is the fix, and the
+  retry test measured 1 attempt against a required 3 before it.
 
 ---
 
@@ -571,7 +601,7 @@ This milestone closes the assignment's **"Testing & Validation"** section entire
 | Discussion of improvements | Milestone 10 |
 
 ## Possible future improvements (outside current scope)
-- **WebSocket + STOMP instead of SSE** — the update channel was originally planned as a STOMP topic (`/topic/game/{sessionId}`) over SockJS. SSE was chosen instead because the traffic is strictly one-way, and SSE delivers that with a native browser API, no JS libraries, free reconnect and `Last-Event-ID` replay. WebSocket becomes the right call the moment the browser needs to *send* on the same channel — a pause/step/resume control, a human player taking over from the bot, or several clients coordinating. It would also win on fan-out: a STOMP broker multiplexes many subscriptions over one connection and handles broadcast itself, whereas the SSE publisher manages its own emitter registry. The swap is contained: a new `GameUpdatePublisher` implementation plus the one line that feeds `render(state)`
+- **WebSocket + STOMP instead of SSE** — the update channel was originally planned as a STOMP topic (`/topic/game/{sessionId}`) over SockJS. SSE was chosen instead because the traffic is strictly one-way, and SSE delivers that with a native browser API, no JS libraries, free reconnect. WebSocket becomes the right call the moment the browser needs to *send* on the same channel — a pause/step/resume control, a human player taking over from the bot, or several clients coordinating. It would also win on fan-out: a STOMP broker multiplexes many subscriptions over one connection and handles broadcast itself, whereas the SSE publisher manages its own emitter registry. The swap is contained: a new `GameUpdatePublisher` implementation plus the one line that feeds `render(state)`
 - Replace random moves with Minimax
 - **Early draw detection** — detect a draw (theoretically) before the board is full, not only when it's full and no winner; for auto-play, a full-board check is currently sufficient
 - **Full reactive stack (WebFlux)** for Engine and Session — possible since `task.md` imposes no reactivity constraint; both services are blocking MVC today, and the Session→Engine call uses the synchronous `RestClient`
@@ -580,3 +610,8 @@ This milestone closes the assignment's **"Testing & Validation"** section entire
 - H2 in persistent (file) mode instead of in-memory — state recovery after restart
 - Multiple parallel game sessions at once
 - **Session crash-recovery during a move** — if `GameSessionOrchestrator` crashes before, during, or after the REST call to Engine, the game is left `IN_PROGRESS` with nothing to resume it (orchestration state is in-memory only in Session, no idempotency key on the Session→Engine move call). Consistent with the Orchestration-not-Saga decision above; fixing it would need persisted orchestration state + an idempotency key so Session can detect "did my last move actually apply" after a restart
+- **Multi-instance SSE via distributed Pub/Sub (Redis / RabbitMQ)** — `SseGameUpdatePublisher` currently registers `SseEmitter` instances in a local `ConcurrentHashMap`. When `game-session-service` scales horizontally behind the Gateway, client SSE streams and simulation runs may land on different pods. A distributed Pub/Sub layer (e.g. Redis Pub/Sub) broadcasts move events across all session pods so any connected client receives updates regardless of which instance runs the simulation.
+- **Kubernetes-native service discovery & routing** — In a Kubernetes environment, eliminate Netflix Eureka in favor of native Kubernetes DNS (`<service>.<namespace>.svc.cluster.local`) and K8s Services / Ingress routing, removing the operational overhead, JVM memory footprint, and registration lag of a dedicated Eureka server.
+- **Durable workflow execution for simulations** — Replace thread-blocking `@Async` + `Thread.sleep` loops in `SessionSimulationRunner` with a durable workflow engine (e.g. Temporal / Cadence) or a message-driven state machine, preventing orphaned or unrecoverable in-flight games when pods restart or scale down.
+- **API Gateway rate limiting & security hardening** — Add request rate limiting (e.g. Redis Token Bucket via `RequestRateLimiter` Gateway filter) and authentication/authorization mechanisms to protect public endpoints (`/sessions`, `/games`) from resource exhaustion and abuse.
+

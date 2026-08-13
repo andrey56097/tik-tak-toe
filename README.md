@@ -46,7 +46,7 @@ This repository implements a **Tic Tac Toe**: the game is not a single monolith 
 
 The assignment is treated as a production-grade distributed system: layered services, design patterns (Strategy, Repository, Adapter, DTO), proper error handling, and a test suite gated by coverage and mutation thresholds.
 
-> **Status:** 🔨 in development, and **the whole system runs**: the **Game Engine** (rules, H2, upsert move endpoint), the **Game Session** orchestrator (auto-play, retries, timeouts), the **UI** (a board that fills itself in the browser), **Eureka** registration, the **SSE** push channel that updates the board the instant a move lands, the **Gateway** that puts all of it behind `localhost:8080`, and **Docker Compose** that starts the five services with one command. Still open: the dedicated testing block of Milestone 7, and the final polish of Milestone 10. The [Roadmap](#roadmap) marks what each milestone closes and which are optional per `task.md`.
+> **Status:** 🔨 in development, and **the whole system runs**: the **Game Engine** (rules, H2, upsert move endpoint), the **Game Session** orchestrator (auto-play, retries, timeouts), the **UI** (a board that fills itself in the browser), **Eureka** registration, the **SSE** push channel that updates the board the instant a move lands, the **Gateway** that puts all of it behind `localhost:8080`, and **Docker Compose** that starts the five services with one command. Milestones 1–11 are closed on the [Roadmap](#roadmap) (including testing, polish, and K8s manifests); known gaps below are residual, not unfinished milestones.
 >
 > **Requirements source:** the assignment is authoritative in [docs/task.md](docs/task.md) (the home assignment). The implementation plan is built on it and tracks it item-by-item.
 
@@ -62,7 +62,7 @@ The assignment is treated as a production-grade distributed system: layered serv
 | 🗺️ **Service discovery & routing** | Netflix Eureka registers every service; Spring Cloud Gateway is the single entry point (`:8080`) and routes by service name. |
 | 🗄️ **Persistent-by-design state** | H2 in-memory DB behind a real JPA repository — one line away from file-based persistence. |
 | 🐳 **Dockerized** | `docker compose up` starts all five services in isolated containers that reach each other over the compose network by service name. |
-| 🧪 **Tested** | Unit tests everywhere, with JaCoCo coverage and Pitest mutation floors gating the engine and session builds. The dedicated integration and concurrency suite is Milestone 7. |
+| 🧪 **Tested** | Unit tests everywhere, with JaCoCo coverage and Pitest mutation floors gating the engine and session builds, plus the Milestone 7 integration and concurrency suite. |
 | 🔄 **CI** | GitHub Actions runs `./gradlew build` on every push and PR, and an AI reviewer comments on each PR. A red build blocks the merge. |
 
 ---
@@ -361,8 +361,20 @@ Engine instances, so it runs separately:
 ./gradlew :game-session-service:integrationTest
 ```
 
-`./gradlew build` includes it, plus the JaCoCo coverage gate for both gated
-modules (see [Continuous Integration](#continuous-integration)).
+The board page has its own suite — Vitest over jsdom, covering the status wording,
+board layout, move formatting and the SSE lifecycle:
+
+```bash
+./gradlew :ui-service:check     # installs the toolchain from the lockfile, then runs it
+npm --prefix ui-service test    # or directly, if node_modules is already there
+```
+
+This is a **test-only** toolchain: the page itself still has no build step, the browser
+resolves its ES imports, and nothing here is packaged into the image. Node 22+ is
+needed for the Gradle task; CI installs it.
+
+`./gradlew build` includes all of the above, plus the JaCoCo coverage gate for both
+gated modules (see [Continuous Integration](#continuous-integration)).
 
 > **Stop the stack before running the full build.** `EurekaServerApplicationTest`
 > starts the Eureka server on its real port (`DEFINED_PORT`, 8761), so
@@ -375,6 +387,7 @@ modules (see [Continuous Integration](#continuous-integration)).
 |------|------|
 | `./gradlew build` | Full build of every module — compile + test + package, plus the Session↔Engine integration suite, JaCoCo coverage gates and Pitest (takes a while) |
 | `./gradlew test` | Run every module's test suite |
+| `./gradlew :ui-service:npmTest` | Run the page's Vitest suite alone |
 | `./gradlew :<module>:bootRun` | Start one service — e.g. `:ui-service:bootRun`. There is no root-level `bootRun`; see [Run](#run) |
 | `./gradlew :<module>:bootJar` | Package one service as an executable jar |
 | `./gradlew clean` | Delete all build outputs |
@@ -474,7 +487,7 @@ logically, not where their priority would put them.
 | 7 | Testing & validation | **required** | ✅ | Integration, error-handling, and concurrency suite |
 | 8 | CI (build + test + quality) | beyond scope | ✅ | GitHub Actions on every push/PR: build, unit + mutation tests, quality checks |
 | 9 | Docker + docker-compose | beyond scope | ✅ | Whole stack up with one command — see [Run with Docker](#run-with-docker) |
-| 10 | Final polish & submission | **required** | 🔜 | README, code style, end-to-end verification — the only stage still open |
+| 10 | Final polish & submission | **required** | ✅ | Audit fixes, metrics + tracing, UI tests, docs truth pass |
 | 11 | Kubernetes readiness | beyond scope | ✅ | Manifests that deploy the stack to a cluster — see [Run on Kubernetes](#run-on-kubernetes) |
 
 Full details — version decisions, design patterns, and the assignment-requirements matrix — live in **[docs/tic-tac-toe-plan.md](docs/tic-tac-toe-plan.md)**.
@@ -513,6 +526,29 @@ integration tests boot real Engine instances in the test JVM
 two services genuinely talk over HTTP — no mocks in that path.
 
 ---
+
+## Observability
+
+Both REST services expose Micrometer metrics on `/actuator/prometheus` (scraped, not
+pushed — the stack needs no external service to run) and emit W3C trace context on the
+Session → Engine call, so a game can be followed across both services.
+
+| Meter | Type | Tags |
+|---|---|---|
+| `tiktaktoe.simulation` | timer | `outcome` = `completed` \| `failed` |
+| `tiktaktoe.simulation.failed` | counter | `reason` |
+| `tiktaktoe.simulation.moves` | counter | — |
+| `tiktaktoe.moves.applied` | counter | `status` = `IN_PROGRESS` \| `WIN` \| `DRAW` |
+| `tiktaktoe.moves.rejected` | counter | `reason` |
+| `tiktaktoe.games.created` | counter | — |
+
+Tag values are fixed by design — a game or session id must never become a tag, since
+each distinct value is a new time series. Traces are sampled at 1.0 (a development
+setting) and exported only if `OTEL_EXPORTER_OTLP_ENDPOINT` points at a collector.
+Every log line carries `[service,traceId,spanId]`.
+
+Swapping Prometheus for a vendor backend (Datadog and friends) is a registry
+dependency, not a rewrite: the meter names above do not change.
 
 ## Continuous Integration
 
@@ -559,10 +595,17 @@ second is optional direction.
 
 - **Timeout recovery on Session → Engine.** A read timeout is retried, so a move Engine did apply can be submitted twice. Engine's turn check rejects the duplicate with a 409, so the board never corrupts — but the session ends `FAILED`. Turning that 409 into recovery (re-read the game, resume from Engine's state) closes it.
 - **Anyone can create games.** `POST /games/{gameId}/move` is an upsert, so any well-formed id materialises a game. That is what lets Session skip a separate create call, but it also means an unauthenticated caller can fill the store one id at a time. `task.md` specifies no authentication, so this waits for whatever auth arrives — or for a quota/eviction policy.
-- **Nothing is ever evicted.** `InMemorySessionStore` keeps every session for the life of the process, and Engine keeps every game.
+- **Engine keeps every game.** `InMemorySessionStore` now sweeps finished sessions on a TTL and refuses new ones past a ceiling (503), but the Engine's H2 has no equivalent — every game ever played stays for the life of the process.
 - **Session crash mid-simulation orphans the game.** The Engine-side game stays `IN_PROGRESS` with no one driving it.
 - **`MoveRequest` carries no `row`/`col` bounds annotations.** Out-of-range coordinates are rejected by `MoveValidator` with a 400, so the contract holds, but the error reads as "cell not playable" rather than naming the offending field.
-- **The browser code has no tests.** `app.js` — the update loop, `render(state)`, the error-body mapping — and the board's layout rules are covered by nothing; `StaticPageTest` only proves the files are served and carry the ids the script drives. A real defect (marks jumping between grid rows, the glyph outgrowing its cell at large font sizes) was found by driving a browser by hand, not by the suite. Playwright is the agreed direction; it was deliberately kept out of the testing milestone (which stays JVM-only) and is open work.
+- **`CellState` doubles as the player symbol.** `MoveRequest.player` is typed `CellState`, so `EMPTY` is syntactically expressible; it is rejected at validation with a 400 rather than by the type system. A separate `Player` type is the clean fix and a breaking contract change.
+- **No authentication and no rate limiting.** Every endpoint is open. Deliberate for an assignment with no user model, and the first thing to add before any real exposure — the session ceiling bounds memory, not abuse.
+- **No production database or schema migrations.** The Engine uses in-memory H2 with `ddl-auto: update`; production persistence needs Postgres, Flyway and `ddl-auto: validate`.
+- **No telemetry backend or operational response.** Metrics and traces are emitted, but Compose starts no OpenTelemetry Collector, Prometheus/Grafana dashboard, alert rules or incident runbook; set `OTEL_EXPORTER_OTLP_ENDPOINT` only after adding that pipeline.
+- **No release verification gate.** Before a deployment, run the full `./gradlew build --continue`, the Docker smoke scenarios and a deployment-specific health check; current CI validates code but does not release an image or deploy it.
+- **One game per session, for ever.** `sessionId` doubles as `gameId`, as `task.md` permits, so a session cannot hold a second game.
+- **Cross-service trace correlation is unproven end to end.** The outbound client is instrumented (`http.client.requests`), which is what puts `traceparent` on the wire, and both services log `traceId`/`spanId` — but a successful game writes no application log lines, so a single id has not been observed in both logs at once.
+- **The browser code has no *visual* tests.** Milestone 10 added 18 Vitest/jsdom tests over the page's logic — status wording, board layout, move formatting, and the SSE lifecycle including stream teardown on every failure path. What they cannot see is rendering: a real defect (marks jumping between grid rows, the glyph outgrowing its cell at large font sizes) was found by driving a browser by hand. Playwright remains the agreed direction for that, and stays open work.
 
 ### Optional direction
 
@@ -573,7 +616,7 @@ second is optional direction.
 - **Persistent H2** (file mode) for state recovery across restarts
 - **Persist history in a DB** — track session/move history and win/loss outcomes (who won/lost, over multiple games) instead of in-memory
 - **Circuit breaker** via `resilience4j-spring-boot4` — retries are in place; a breaker would stop hammering an Engine that is down for longer
-- **Observability**: MDC logging with `gameId`/`sessionId` correlation
+- **Observability backend**: OpenTelemetry Collector plus Prometheus/Grafana dashboards, alert rules and an incident runbook
 - **Discovery through Kubernetes itself** — the manifests in [`k8s/`](k8s/) keep Eureka, so the deployed system stays the one this README describes. A cluster already resolves `game-engine-service` through its own DNS, so a production deployment would drop the registry (or move to Spring Cloud Kubernetes) and delete a moving part
 - **A registry for the images** — nothing is published today, so the cluster is fed with `minikube image load`; a real deployment pulls tags that CI pushed
 - **Shared session state** — an in-memory `SessionStore` is what pins the session service to one replica and loses games on a rolling update

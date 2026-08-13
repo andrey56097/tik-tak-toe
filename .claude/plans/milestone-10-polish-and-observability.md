@@ -101,7 +101,7 @@ these.
 | `common/src/test/java/.../common/web/AbstractRestExceptionHandlerTest.java` | Proves the shared handlers, once, for both services |
 | `game-session-service/src/main/java/.../session/store/SessionRetentionPolicy.java` | Value type: how long terminal sessions are kept and how many may exist |
 | `game-session-service/src/main/java/.../session/exception/SessionCapacityException.java` | Signals the running-session ceiling was reached → 503 |
-| `game-session-service/src/main/java/.../session/config/ObservabilityConfig.java` | Meter/observation beans and the simulation's MDC scope |
+| `game-session-service/src/main/java/.../session/config/ObservabilityConfig.java` | Meter/observation configuration |
 | `game-session-service/src/main/java/.../session/service/SimulationMetrics.java` | Counters and timers for the auto-play loop |
 | `game-engine-service/src/main/java/.../engine/service/EngineMetrics.java` | Counters for moves applied/rejected and games created |
 | `ui-service/package.json` | Test-only toolchain (Vitest + jsdom). Not a build step for the served page |
@@ -122,7 +122,7 @@ these.
 | `game-engine-service/src/main/resources/application.yml` | `open-in-view: false`, H2 console off by default, Prometheus endpoint |
 | `game-session-service/.../exception/SessionExceptionHandler.java` | Extends the shared base; adds the capacity handler |
 | `game-session-service/.../store/InMemorySessionStore.java` | Retention sweep + running-session ceiling |
-| `game-session-service/.../service/SessionSimulationRunner.java` | `Throwable` safety net, MDC scope, metrics |
+| `game-session-service/.../service/SessionSimulationRunner.java` | `Throwable` safety net and metrics |
 | `game-session-service/build.gradle.kts` | Drop `starter-websocket`; `starter-web` → `starter-webmvc`; observability deps; fix the stale comment |
 | `ui-service/src/main/resources/static/app.js` | Import from `render.js`; close the stream on every terminal path |
 | `ui-service/build.gradle.kts` | `npmTest` task wired into `check` |
@@ -1057,7 +1057,7 @@ management:
       endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:}
 ```
 
-- [ ] **Step 6: Correlated logs — this closes the M10 "MDC" item**
+- [ ] **Step 6: Correlated logs**
 
 Add to both services' `application.yml` so every line carries the ids that let a
 Session log line be joined to the Engine line it caused:
@@ -1068,14 +1068,9 @@ logging:
     level: "%5p [${spring.application.name},%X{traceId:-},%X{spanId:-}]"
 ```
 
-and in `SessionSimulationRunner.run`, wrap the loop so the session id is on every
-line the simulation produces:
-
-```java
-try (MDC.MDCCloseable ignored = MDC.putCloseable("sessionId", sessionId)) {
-    ...
-}
-```
+The simulation runner keeps `sessionId` in its explicit log messages. A custom MDC
+scope is unnecessary because Micrometer already supplies `traceId` and `spanId`, and
+thread-pool context must not leak between simulations.
 
 - [ ] **Step 7: Prove the trace actually crosses the service boundary**
 
@@ -1566,7 +1561,7 @@ settled, and 9 may end in a revert, so nothing should depend on it.
 
 - **Spec coverage:** all 19 audit findings map to a task (see the table above); all
   four remaining Milestone 10 items from `docs/tic-tac-toe-plan.md:527-535` are
-  covered by Tasks 6 (MDC), 10 (README, comments, final runs) and 9 (`@Retryable`,
+  covered by Tasks 6 (metrics and tracing), 10 (README, comments, final runs) and 9 (`@Retryable`,
   which was already ticked and is now re-examined).
 - **Deliberate exclusions:** security and Flyway are named in *Out of scope* and
   documented in Task 10 Step 2 rather than silently dropped.
@@ -1574,3 +1569,114 @@ settled, and 9 may end in a revert, so nothing should depend on it.
   Task 1 and no later task calls the old signature; `SessionCapacityException` is
   created in Task 4 and handled in the class Task 3 restructures, so Task 4 must
   run after Task 3 — reflected in the execution order.
+
+---
+
+## Follow-up: harden admission (post Task 4 / Task 5)
+
+> Status: **implemented on `milestone-10` — awaiting user go-ahead to commit.**
+> Grilling decisions locked; tests written first (red), production code green,
+> reviewer APPROVE after fix loop.
+
+### What landed in Tasks 4–5
+
+| Control | Intent | Where |
+|---|---|---|
+| `session.store.max-sessions` (default 10 000) | Hard ceiling on how many session records the in-memory store may hold; over capacity → `503` via `SessionCapacityException` | `InMemorySessionStore.save` |
+| `session.simulation.max-concurrent` (default 50) + `@ConcurrencyLimit(BLOCK)` on `SessionSimulationRunner.run` | Cap how many auto-play loops may run at once after virtual threads removed the old platform-pool accident limit | `SessionSimulationRunner` |
+
+Both were correct *directions*: unbounded in-memory growth and unbounded parked simulations are real failure modes. The follow-up closes gaps between **what the ceilings claim** and **what concurrent callers can actually force**.
+
+### Why this follow-up exists
+
+The polish pass introduced capacity as an operator-facing guarantee (“better a 503 than an OOM / unbounded work”). Two concurrency details currently make those guarantees softer than the code and docs imply:
+
+1. **Store ceiling check is not map-wide atomic.**  
+   `ConcurrentHashMap.compute` is atomic *per key*. Inside the lambda, `entries.size() >= maxSessions` is read while another thread can be inserting a *different* `sessionId`. Two concurrent `POST /sessions` at the boundary can both pass the check and both insert, so the map can exceed `max-sessions`. The sequential capacity IT (`max-sessions=1`, create then create) stays green and does not catch this. A ceiling that can be overrun under parallel create is not a hard ceiling — it only approximates one.
+
+2. **`@ConcurrencyLimit(BLOCK)` bounds active simulations, not accepted work.**  
+   `simulate` claims `RUNNING` and hands off to `@Async` immediately (by design — HTTP must not wait for a slot). Surplus virtual threads then park on the concurrency limiter. Active Engine work stays ≤ 50, but a burst can still create a large *waiting* set (up to roughly the store size). Operators reading `max-concurrent: 50` as “load is limited to 50” are reading more than the annotation delivers. Task 5 deliberately chose BLOCK so a session already claimed `RUNNING` is not abandoned; that tradeoff is still valid — the follow-up should make *admission* explicit rather than leave an unbounded wait queue as the silent half of the policy.
+
+Fixing these keeps the Milestone 10 story coherent: the limits we added for heap and load behave as hard admissions under concurrency, with tests that prove the parallel case — not only the happy sequential path.
+
+Also in the same docs pass (cheap, same milestone narrative): the README **Status** blurb still says Milestones 7 and 10 are open while the Roadmap table marks both ✅ — align the Status text with reality.
+
+### Proposed shape (pending decisions below)
+
+**A — Atomic store admission**
+
+- Replace “check `size()` inside per-key `compute`” with a **single map-wide admission** (exact mechanism TBD: `Semaphore`, `AtomicInteger` occupied counter with acquire/release, or one store-level lock around check+insert for *new* keys).
+- Release / decrement on eviction of terminal sessions (and never leak a slot if `save` fails after acquire).
+- Add a **parallel** unit/IT that hammers `save` at the ceiling and asserts `size() <= maxSessions` (and that excess callers get `SessionCapacityException`).
+
+**B — Simulation admission before background work**
+
+- Prefer rejecting overload with a clear `503` *before* the session is claimed `RUNNING` / before `@Async` parks a waiter — so “full” means “try again later”, not “accepted and queued indefinitely”.
+- Exact placement (orchestrator vs dedicated gate vs replacing `@ConcurrencyLimit`) and whether BLOCK remains as a second line of defence — TBD in grilling.
+- Parallel / saturation test that proves surplus `simulate` calls get `503` promptly and that in-flight work stays within the configured limit.
+
+**C — Docs**
+
+- README Status sentence: drop “Still open: … Milestone 7 … Milestone 10”; match the Roadmap.
+- Touch Known gaps only if a deliberate remainder stays (e.g. if we keep BLOCK as inner guard and document that).
+
+### Settled decisions (grilling) — shared understanding
+
+| # | Decision | Choice |
+|---|---|---|
+| Q1 | Scope | **Both** A (atomic store ceiling) and B (simulation hard reject) in this follow-up |
+| Q2 | Store admission | **`Semaphore(maxSessions)`** — acquire on new session, release on terminal eviction |
+| Q3 | Simulation overload | **Hard reject with `503`** before `claimForRunning` / before `@Async` parks a waiter; session must not become stranded `RUNNING` |
+| Q4 | Where simulation admission lives | **`GameSessionOrchestrator.simulate`** acquires the slot itself (injected semaphore / shared bean) |
+| Q5 | Exception on simulation reject | **Reuse `SessionCapacityException`** → existing 503 handler; distinct **message** for store vs simulation |
+| Q6 | `@ConcurrencyLimit` | **Remove**; one explicit simulation `Semaphore` — acquire in orchestrator before claim, **`release` in `finally` inside `run`** |
+| Q7 | README Status blurb | **Yes**, same follow-up — align Status with Roadmap (M7/M10 no longer “open”) |
+| Q8 | Session after simulate reject | Leave **`CREATED`**; client may retry `POST .../simulate` |
+| Q9 | Simulation `Semaphore` ownership | One Spring **`@Bean`** (permits = `max-concurrent`), injected into orchestrator + runner |
+| Q10 | Store `Semaphore` ownership | Encapsulated inside **`InMemorySessionStore`**; release on eviction |
+
+**Grilling status:** frontier empty. Implementation must not start until the user explicitly says to proceed (TDD via project `sdd` / separate test + implementer agents as usual).
+
+### Implementation sketch (agreed, not yet built)
+
+**A — `InMemorySessionStore`**
+
+- Construct `Semaphore(maxSessions)` from `SessionRetentionPolicy.maxSessions()`.
+- On `save` of a **new** id: `tryAcquire()`; if false → `SessionCapacityException` (store-full message). On success, `compute` insert; if insert aborts unexpectedly after acquire, `release` (should be rare).
+- Updates to an existing id: no acquire.
+- `evictExpired`: for each removed terminal entry, `release()` once.
+- Parallel test: many threads hammer `save` at a low ceiling; assert `entries.size() <= max` and that failures are `SessionCapacityException`.
+
+**B — Simulation admission**
+
+- `@Bean` simulation semaphore sized to `session.simulation.max-concurrent`.
+- `GameSessionOrchestrator.simulate`: `tryAcquire()`; if false → `SessionCapacityException` (simulation-full message). If true: `claimForRunning`; on claim failure → `release` then rethrow; on success → `runner.run(sessionId)`.
+- `SessionSimulationRunner.run`: wrap body in `try/finally { semaphore.release(); }`. Remove `@ConcurrencyLimit` (and drop `@EnableResilientMethods` if nothing else needs it).
+- Update OpenAPI on `POST .../simulate` to document `503`.
+- Tests: replace/extend `SimulationConcurrencyLimitTest` so surplus `simulate` calls get capacity exception / 503 promptly; peak in-flight still ≤ limit; HTTP hand-off stays non-blocking for accepted calls.
+
+**C — Docs**
+
+- README Status: remove “Still open: … Milestone 7 … Milestone 10”.
+- OpenAPI / comments: state that `max-concurrent` is an admission ceiling (reject), not a wait queue.
+
+### Open decisions
+
+None — grilling complete. Implementation done; await user decision on commit / next steps.
+
+### Done checklist (this follow-up)
+
+- [x] Atomic store admission (`Semaphore` inside `InMemorySessionStore`)
+- [x] Parallel store ceiling test
+- [x] Simulation hard reject before claim (`Semaphore` bean + orchestrator acquire)
+- [x] Release in `SessionSimulationRunner.run` `finally`; `@ConcurrencyLimit` removed
+- [x] OpenAPI `503` on create + simulate
+- [x] README Status aligned with Roadmap
+- [x] Reviewer APPROVE after eviction/save/handoff release fixes
+- [ ] Commit (needs explicit user confirmation)
+
+### Non-goals for this follow-up
+
+- UI bounded reconnect / polling fallback (demo-acceptable; separate concern).
+- Rewriting long historical comments in `application.yml` / CI for style alone.
+- Security, rate limiting at the gateway, Postgres/Flyway, external telemetry backends — still out of scope as decided earlier in this plan.
