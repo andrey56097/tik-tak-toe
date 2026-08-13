@@ -3,7 +3,8 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: use the project `sdd` skill to
 > implement this plan task-by-task (it wraps
 > `superpowers:subagent-driven-development` with this project's TDD +
-> code-quality requirements). Steps use checkbox (`- [ ]`) syntax for tracking.
+> code-quality requirements). Steps use checkbox (`- [x]` / `- [ ]`) syntax for
+> tracking. **All tasks below are complete** — delivered via PRs #24–#27 on `main`.
 
 **Goal:** close every real defect found by the 2026-08-13 whole-repo audit, give
 the system real observability (metrics + distributed tracing), and make the
@@ -153,7 +154,7 @@ these.
 turn"`. `EMPTY` is not a player at all, so the symbol check has to run *first* and
 produce a 400. Verified against the running service on 2026-08-13.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `common/src/test/java/com/flamingo/tiktaktoe/common/CellStateTest.java` — add:
 
@@ -210,7 +211,7 @@ void aRejectedEmptyPlayerCreatesNoGame() throws Exception {
 }
 ```
 
-- [ ] **Step 2: Run the tests and confirm they fail for the right reason**
+- [x] **Step 2: Run the tests and confirm they fail for the right reason**
 
 ```bash
 ./gradlew :common:test --tests '*CellStateTest*'
@@ -221,7 +222,7 @@ Expected: `CellStateTest` fails because `EMPTY.opposite()` returns `X` instead o
 throwing; `MoveValidatorTest` fails to compile because `isPlayerSymbol` does not
 exist; the controller test fails with `expected 400 but was 409`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `CellState.java`:
 
@@ -271,7 +272,7 @@ public GameState makeMove(String gameId, MoveRequest move) {
     ...
 ```
 
-- [ ] **Step 4: Run the tests and confirm green, including the mutation gate**
+- [x] **Step 4: Run the tests and confirm green, including the mutation gate**
 
 ```bash
 ./gradlew :common:test :game-engine-service:check
@@ -279,7 +280,7 @@ public GameState makeMove(String gameId, MoveRequest move) {
 
 Expected: PASS, Pitest still ≥80% on `game-engine-service`.
 
-- [ ] **Step 5: Commit** (after the user confirms — see Global Constraints)
+- [x] **Step 5: Commit** (after the user confirms — see Global Constraints)
 
 ```bash
 git add common/src game-engine-service/src
@@ -306,7 +307,7 @@ the Pitest plugin was only ever added to the two modules that came *after* the r
 existed. `common` holds `CellState`, `GameStateFactory` and `ErrorResponse` and is
 gated by nothing — which is exactly where Task 1's bug was living.
 
-- [ ] **Step 1: Add the plugins and the gates**
+- [x] **Step 1: Add the plugins and the gates**
 
 `common/build.gradle.kts`:
 
@@ -351,7 +352,7 @@ pitest {
 }
 ```
 
-- [ ] **Step 2: Run the gate and read the surviving mutants**
+- [x] **Step 2: Run the gate and read the surviving mutants**
 
 ```bash
 ./gradlew :common:check
@@ -361,7 +362,7 @@ open common/build/reports/pitest/index.html
 Expected: it may well **fail** on the first run. That failure is the point — it is
 the list of assertions the module never had.
 
-- [ ] **Step 3: Kill the surviving mutants with real assertions**
+- [x] **Step 3: Kill the surviving mutants with real assertions**
 
 Do not weaken the threshold. For each survivor, add a test that asserts the
 behaviour the mutant changed. Known thin spots to expect:
@@ -398,7 +399,7 @@ void everyFreshGameStartsInProgressWithXToMoveAndNoWinner() {
 }
 ```
 
-- [ ] **Step 4: Confirm green**
+- [x] **Step 4: Confirm green**
 
 ```bash
 ./gradlew :common:check
@@ -406,7 +407,7 @@ void everyFreshGameStartsInProgressWithXToMoveAndNoWinner() {
 
 Expected: BUILD SUCCESSFUL, mutation ≥80%.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add common/
@@ -451,7 +452,7 @@ testImplementation("org.springframework:spring-webmvc")
 testImplementation("jakarta.servlet:jakarta.servlet-api")
 ```
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `common/src/test/java/com/flamingo/tiktaktoe/common/web/AbstractRestExceptionHandlerTest.java`:
 
@@ -506,7 +507,7 @@ class AbstractRestExceptionHandlerTest {
 }
 ```
 
-- [ ] **Step 2: Run it and confirm it fails**
+- [x] **Step 2: Run it and confirm it fails**
 
 ```bash
 ./gradlew :common:test --tests '*AbstractRestExceptionHandlerTest*'
@@ -514,7 +515,7 @@ class AbstractRestExceptionHandlerTest {
 
 Expected: compilation failure — `AbstractRestExceptionHandler` does not exist.
 
-- [ ] **Step 3: Implement the base class**
+- [x] **Step 3: Implement the base class**
 
 Move the shared handlers out of `GameExceptionHandler` verbatim (they are the
 better of the two implementations — the session copy is the one missing the
@@ -585,7 +586,7 @@ public abstract class AbstractRestExceptionHandler {
 }
 ```
 
-- [ ] **Step 4: Reduce both services to their domain handlers**
+- [x] **Step 4: Reduce both services to their domain handlers**
 
 `GameExceptionHandler extends AbstractRestExceptionHandler` keeps only
 `GameNotFoundException`, `MethodArgumentNotValidException`, `InvalidMoveException`,
@@ -598,7 +599,7 @@ public abstract class AbstractRestExceptionHandler {
 `SessionNotFoundException` and `SessionConflictException` (plus
 `SessionCapacityException` once Task 5 lands), and deletes the same three.
 
-- [ ] **Step 5: Prove the session service's 405 changed behaviour**
+- [x] **Step 5: Prove the session service's 405 changed behaviour**
 
 Add to `SessionExceptionHandlerTest`:
 
@@ -612,7 +613,7 @@ void methodNotAllowedNowCarriesTheAllowHeader() throws Exception {
 }
 ```
 
-- [ ] **Step 6: Run everything**
+- [x] **Step 6: Run everything**
 
 ```bash
 ./gradlew :common:check :game-engine-service:check :game-session-service:check
@@ -620,7 +621,7 @@ void methodNotAllowedNowCarriesTheAllowHeader() throws Exception {
 
 Expected: all green. Both services answer 405 identically.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add common game-engine-service game-session-service
@@ -652,7 +653,7 @@ JVM restarts, and `POST /sessions` needs no body and no credentials.
 holds a `Clock`. A test that proves eviction by sleeping for a real TTL is a slow,
 flaky test; a test that passes a later `Instant` is neither.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```java
 @Test
@@ -713,7 +714,7 @@ void updatingAnExistingSessionIsNeverRejectedByTheCeiling() {
 The last test is the one that matters most: the ceiling must reject *new* sessions
 only. Rejecting an update would strand a running simulation halfway through.
 
-- [ ] **Step 2: Run and confirm red**
+- [x] **Step 2: Run and confirm red**
 
 ```bash
 ./gradlew :game-session-service:test --tests '*InMemorySessionStoreTest*'
@@ -721,7 +722,7 @@ only. Rejecting an update would strand a running simulation halfway through.
 
 Expected: compilation failure — `SessionRetentionPolicy` does not exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 The store now holds `record Entry(SessionRecord record, Instant lastUpdated)`, and:
 
@@ -786,7 +787,7 @@ public ResponseEntity<ErrorResponse> handleCapacity(SessionCapacityException ex,
 }
 ```
 
-- [ ] **Step 4: Add the endpoint-level test**
+- [x] **Step 4: Add the endpoint-level test**
 
 `SessionControllerIntegrationTest`:
 
@@ -802,13 +803,13 @@ void creatingASessionBeyondTheCeilingAnswers503WithTheSharedErrorBody() throws E
 }
 ```
 
-- [ ] **Step 5: Run**
+- [x] **Step 5: Run**
 
 ```bash
 ./gradlew :game-session-service:check
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add game-session-service
@@ -845,7 +846,7 @@ so limiting it would limit nothing. Limiting `run` — with the default blocking
 at once, which is the intended behaviour: a session already claimed RUNNING must
 not be dropped, and the HTTP caller already got its 202.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```java
 @Test
@@ -874,13 +875,13 @@ void noMoreThanTheConfiguredNumberOfSimulationsRunAtOnce() throws Exception {
 }
 ```
 
-- [ ] **Step 2: Run and confirm red** — `peak` reaches 5.
+- [x] **Step 2: Run and confirm red** — `peak` reaches 5.
 
 ```bash
 ./gradlew :game-session-service:test --tests '*SessionSimulationRunnerTest*'
 ```
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `AsyncConfig` gains `@EnableResilientMethods` alongside `@EnableAsync`, and
 `SessionSimulationRunner.run` gains:
@@ -901,7 +902,7 @@ session:
     max-concurrent: 50
 ```
 
-- [ ] **Step 4: Confirm green and that a full game still plays**
+- [x] **Step 4: Confirm green and that a full game still plays**
 
 ```bash
 ./gradlew :game-session-service:check
@@ -911,7 +912,7 @@ Expected: the limit test passes **and** `SessionAutoPlayIntegrationTest` plus th
 whole `integrationTest` suite still complete — a limit that deadlocks the happy
 path is worse than no limit.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add game-session-service
@@ -952,7 +953,7 @@ implementation("io.micrometer:micrometer-tracing-bridge-otel")
 implementation("io.opentelemetry:opentelemetry-exporter-otlp")
 ```
 
-- [ ] **Step 1: Verify the BOM manages those coordinates before writing code**
+- [x] **Step 1: Verify the BOM manages those coordinates before writing code**
 
 ```bash
 ./gradlew :game-session-service:dependencies --configuration runtimeClasspath | grep -E "micrometer-registry-prometheus|micrometer-tracing|opentelemetry-exporter-otlp"
@@ -962,7 +963,7 @@ Expected: each resolves to a concrete version with no explicit version in the bu
 file. If one does not resolve, it is **not** BOM-managed — pin it explicitly and
 say so in a comment, exactly as `spring-retry` is pinned today.
 
-- [ ] **Step 2: Write the failing metrics tests**
+- [x] **Step 2: Write the failing metrics tests**
 
 ```java
 @Test
@@ -1012,14 +1013,14 @@ void appliedMovesAreCountedByResultingStatus() {
 }
 ```
 
-- [ ] **Step 3: Run and confirm red**
+- [x] **Step 3: Run and confirm red**
 
 ```bash
 ./gradlew :game-session-service:test --tests '*SimulationMetricsTest*'
 ./gradlew :game-engine-service:test --tests '*EngineMetricsTest*'
 ```
 
-- [ ] **Step 4: Implement the metric holders and call them**
+- [x] **Step 4: Implement the metric holders and call them**
 
 `SimulationMetrics` and `EngineMetrics` are thin, injected collaborators — the
 loop and the rules keep their single responsibility and simply report. **No metric
@@ -1036,7 +1037,7 @@ Names, fixed here so later tasks and dashboards agree:
 | `tiktaktoe.moves.rejected` | counter | `reason` = `not-playable` \| `wrong-turn` \| `finished` \| `bad-symbol` |
 | `tiktaktoe.sessions.active` | gauge | — (reads the store's size) |
 
-- [ ] **Step 5: Expose the endpoint on both services**
+- [x] **Step 5: Expose the endpoint on both services**
 
 ```yaml
 management:
@@ -1057,7 +1058,7 @@ management:
       endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:}
 ```
 
-- [ ] **Step 6: Correlated logs**
+- [x] **Step 6: Correlated logs**
 
 Add to both services' `application.yml` so every line carries the ids that let a
 Session log line be joined to the Engine line it caused:
@@ -1072,7 +1073,7 @@ The simulation runner keeps `sessionId` in its explicit log messages. A custom M
 scope is unnecessary because Micrometer already supplies `traceId` and `spanId`, and
 thread-pool context must not leak between simulations.
 
-- [ ] **Step 7: Prove the trace actually crosses the service boundary**
+- [x] **Step 7: Prove the trace actually crosses the service boundary**
 
 `TracePropagationIT` (in the existing `integrationTest` source set, which already
 boots a real Engine):
@@ -1090,14 +1091,14 @@ This is the assertion that makes tracing real rather than configured: a
 `traceparent` header that is generated but never propagated looks identical in the
 config file.
 
-- [ ] **Step 8: Run the whole thing**
+- [x] **Step 8: Run the whole thing**
 
 ```bash
 ./gradlew :game-engine-service:check :game-session-service:check
 curl -s localhost:8081/actuator/prometheus | grep tiktaktoe
 ```
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add game-engine-service game-session-service
@@ -1130,7 +1131,7 @@ with no bundler and no `node_modules` in the image. What is added here is a
 having it is 234 lines of logic covered by nothing while the Java side is gated at
 80% mutation. The Docker image is unaffected: `bootJar` does not run the JS suite.
 
-- [ ] **Step 1: Set up the toolchain**
+- [x] **Step 1: Set up the toolchain**
 
 `ui-service/package.json`:
 
@@ -1144,7 +1145,7 @@ having it is 234 lines of logic covered by nothing while the Java side is gated 
 }
 ```
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 `render.test.js`:
 
@@ -1203,7 +1204,7 @@ it('does not open a second stream when start is clicked twice', async () => {
 });
 ```
 
-- [ ] **Step 3: Run and confirm red**
+- [x] **Step 3: Run and confirm red**
 
 ```bash
 cd ui-service && npm install && npm test
@@ -1212,13 +1213,13 @@ cd ui-service && npm install && npm test
 Expected: `render.js` does not exist; the flow tests fail because `app.js` never
 calls `close()` on the error paths.
 
-- [ ] **Step 4: Extract the pure functions and fix the leak**
+- [x] **Step 4: Extract the pure functions and fix the leak**
 
 `app.js` keeps a module-level reference to the current `EventSource` and closes it
 before opening another and on every terminal path (`done`, create failure, simulate
 failure).
 
-- [ ] **Step 5: Wire it into Gradle and CI**
+- [x] **Step 5: Wire it into Gradle and CI**
 
 `ui-service/build.gradle.kts`:
 
@@ -1245,13 +1246,13 @@ tasks.named("check") { dependsOn(npmTest) }
 
 If `npm ci` needs a lockfile, commit `ui-service/package-lock.json`.
 
-- [ ] **Step 6: Run**
+- [x] **Step 6: Run**
 
 ```bash
 ./gradlew :ui-service:check
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add ui-service .github/workflows/ci.yml
@@ -1273,7 +1274,7 @@ git commit -m "[MILESTONE-10] Test the UI logic and close the SSE stream on ever
 Each item here is independently small; they ship as one commit because none of them
 is worth a reviewer's separate gate.
 
-- [ ] **Step 1: Write the tests that pin the behavioural ones**
+- [x] **Step 1: Write the tests that pin the behavioural ones**
 
 ```java
 // GameEngineServiceTest — nextTurn must not flip past the end of the game
@@ -1292,13 +1293,13 @@ void anErrorFromTheEngineClientStillEndsTheSessionAsFailed() {
 }
 ```
 
-- [ ] **Step 2: Run and confirm red**
+- [x] **Step 2: Run and confirm red**
 
 ```bash
 ./gradlew :game-engine-service:test :game-session-service:test
 ```
 
-- [ ] **Step 3: Apply the changes**
+- [x] **Step 3: Apply the changes**
 
 1. `game-engine-service/application.yml`:
 
@@ -1360,7 +1361,7 @@ if (winner != null) {
 }
 ```
 
-- [ ] **Step 4: Run everything, including the docker smoke path**
+- [x] **Step 4: Run everything, including the docker smoke path**
 
 ```bash
 ./gradlew build --continue
@@ -1369,7 +1370,7 @@ docker compose up --build --wait && ./scripts/smoke.sh && docker compose down
 
 Expected: green, and no `open-in-view` warning in the engine's startup log.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add game-engine-service game-session-service
@@ -1400,14 +1401,14 @@ this removes a hand-pinned dependency *and* a workaround.
 deliverable is a decision backed by a passing test suite, not a migration at any
 cost.
 
-- [ ] **Step 1: Keep the existing retry tests exactly as they are**
+- [x] **Step 1: Keep the existing retry tests exactly as they are**
 
 `RestGameEngineClientRetryTest` already proves the contract against a real
 MockWebServer: 3 attempts on a 5xx, **no** retry on a 4xx, backoff between
 attempts. It is the parity harness. **Do not modify it** — if it cannot pass
 against the framework annotation, that is the finding.
 
-- [ ] **Step 2: Swap the annotation**
+- [x] **Step 2: Swap the annotation**
 
 ```java
 import org.springframework.resilience.annotation.Retryable;
@@ -1431,14 +1432,14 @@ runtimeOnly("org.aspectj:aspectjweaver")
 and from `AsyncConfig`: `@EnableRetry` and the `RetryListener` bean (the
 framework's equivalent observability is Micrometer's, added in Task 6).
 
-- [ ] **Step 3: Run the parity harness**
+- [x] **Step 3: Run the parity harness**
 
 ```bash
 ./gradlew :game-session-service:test --tests '*RestGameEngineClientRetryTest*'
 ./gradlew :game-session-service:integrationTest --tests '*EngineUnavailableIT*'
 ```
 
-- [ ] **Step 4: Decide, and record the decision either way**
+- [x] **Step 4: Decide, and record the decision either way**
 
 - **Green →** commit the removal, and note in the README's tech-stack section that
   retry is framework-native.
@@ -1447,7 +1448,7 @@ framework's equivalent observability is Micrometer's, added in Task 6).
   framework annotation could not reproduce. A documented deliberate choice is a
   fine outcome; an undocumented divergence from CLAUDE.md is not.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add game-session-service
@@ -1466,7 +1467,7 @@ git commit -m "[MILESTONE-10] Retry through the framework instead of a hand-pinn
 `milestone-10`. Run it after the branch merges, so it describes what actually
 shipped.
 
-- [ ] **Step 1: Delete claims that are not true**
+- [x] **Step 1: Delete claims that are not true**
 
 The audit found documentation promising behaviour that does not exist. Remove the
 promise, not the feature:
@@ -1490,7 +1491,7 @@ grep -rniE "replay|will be|planned|automatically retr|self-heal" README.md docs/
 For each hit: either it is true, or the sentence changes. Future intentions belong
 under *Possible Improvements*, phrased as intentions — never in the present tense.
 
-- [ ] **Step 2: Record the boundaries that were chosen, not overlooked**
+- [x] **Step 2: Record the boundaries that were chosen, not overlooked**
 
 Add to the README's **Known gaps**, each one sentence with its reason:
 
@@ -1507,13 +1508,13 @@ Add to the README's **Known gaps**, each one sentence with its reason:
 - **One game per session, forever.** `sessionId` doubles as `gameId`, as
   `task.md` permits.
 
-- [ ] **Step 3: Update the roadmap and the milestone checkboxes**
+- [x] **Step 3: Update the roadmap and the milestone checkboxes**
 
 Tick the four remaining Milestone 10 items in `docs/tic-tac-toe-plan.md:527-535`
 (each with the evidence that closes it, matching the convention established in the
 earlier milestones), and flip the README roadmap's row 10 from 🔜 to ✅.
 
-- [ ] **Step 4: The final end-to-end runs**
+- [x] **Step 4: The final end-to-end runs**
 
 The plan's own remaining item is "final end-to-end run of the full game cycle
 several times in a row". Three consecutive full games through the gateway, from a
@@ -1530,7 +1531,7 @@ Record the result — including the metric values from
 `/actuator/prometheus` after the three runs — in this file under a
 **Verified on \<date\>** heading, in the same shape Milestone 9 and 11 used.
 
-- [ ] **Step 5: Commit to `main`**
+- [x] **Step 5: Commit to `main`**
 
 ```bash
 git add README.md docs/tic-tac-toe-plan.md .claude/plans/milestone-10-polish-and-observability.md
@@ -1574,22 +1575,22 @@ settled, and 9 may end in a revert, so nothing should depend on it.
 
 ## Follow-up: harden admission (post Task 4 / Task 5)
 
-> Status: **implemented on `milestone-10` — awaiting user go-ahead to commit.**
-> Grilling decisions locked; tests written first (red), production code green,
-> reviewer APPROVE after fix loop.
+> Status: **done and on `main`.** Admission follow-up shipped in PR #27 (session);
+> engine/common/UI polish in #26 / #25 / #24. No open implementation work left in
+> this plan.
 
-### What landed in Tasks 4–5
+### What landed in Tasks 4–5 (before the follow-up)
 
 | Control | Intent | Where |
 |---|---|---|
 | `session.store.max-sessions` (default 10 000) | Hard ceiling on how many session records the in-memory store may hold; over capacity → `503` via `SessionCapacityException` | `InMemorySessionStore.save` |
 | `session.simulation.max-concurrent` (default 50) + `@ConcurrencyLimit(BLOCK)` on `SessionSimulationRunner.run` | Cap how many auto-play loops may run at once after virtual threads removed the old platform-pool accident limit | `SessionSimulationRunner` |
 
-Both were correct *directions*: unbounded in-memory growth and unbounded parked simulations are real failure modes. The follow-up closes gaps between **what the ceilings claim** and **what concurrent callers can actually force**.
+Both were correct *directions*. The follow-up (below) replaced the soft spots: store admission is now a map-wide `Semaphore`, and simulation overload is a hard `503` before claim (no `@ConcurrencyLimit` wait queue).
 
-### Why this follow-up exists
+### Why this follow-up existed
 
-The polish pass introduced capacity as an operator-facing guarantee (“better a 503 than an OOM / unbounded work”). Two concurrency details currently make those guarantees softer than the code and docs imply:
+The polish pass introduced capacity as an operator-facing guarantee (“better a 503 than an OOM / unbounded work”). Two concurrency details made those guarantees softer than the code and docs implied:
 
 1. **Store ceiling check is not map-wide atomic.**  
    `ConcurrentHashMap.compute` is atomic *per key*. Inside the lambda, `entries.size() >= maxSessions` is read while another thread can be inserting a *different* `sessionId`. Two concurrent `POST /sessions` at the boundary can both pass the check and both insert, so the map can exceed `max-sessions`. The sequential capacity IT (`max-sessions=1`, create then create) stays green and does not catch this. A ceiling that can be overrun under parallel create is not a hard ceiling — it only approximates one.
@@ -1597,11 +1598,11 @@ The polish pass introduced capacity as an operator-facing guarantee (“better a
 2. **`@ConcurrencyLimit(BLOCK)` bounds active simulations, not accepted work.**  
    `simulate` claims `RUNNING` and hands off to `@Async` immediately (by design — HTTP must not wait for a slot). Surplus virtual threads then park on the concurrency limiter. Active Engine work stays ≤ 50, but a burst can still create a large *waiting* set (up to roughly the store size). Operators reading `max-concurrent: 50` as “load is limited to 50” are reading more than the annotation delivers. Task 5 deliberately chose BLOCK so a session already claimed `RUNNING` is not abandoned; that tradeoff is still valid — the follow-up should make *admission* explicit rather than leave an unbounded wait queue as the silent half of the policy.
 
-Fixing these keeps the Milestone 10 story coherent: the limits we added for heap and load behave as hard admissions under concurrency, with tests that prove the parallel case — not only the happy sequential path.
+Fixing these kept the Milestone 10 story coherent: the limits added for heap and load behave as hard admissions under concurrency, with tests that prove the parallel case — not only the happy sequential path.
 
-Also in the same docs pass (cheap, same milestone narrative): the README **Status** blurb still says Milestones 7 and 10 are open while the Roadmap table marks both ✅ — align the Status text with reality.
+Also in the same docs pass: the README **Status** blurb still said Milestones 7 and 10 were open while the Roadmap table marked both ✅ — aligned in this follow-up.
 
-### Proposed shape (pending decisions below)
+### Proposed shape (settled — built as below)
 
 **A — Atomic store admission**
 
@@ -1635,9 +1636,9 @@ Also in the same docs pass (cheap, same milestone narrative): the README **Statu
 | Q9 | Simulation `Semaphore` ownership | One Spring **`@Bean`** (permits = `max-concurrent`), injected into orchestrator + runner |
 | Q10 | Store `Semaphore` ownership | Encapsulated inside **`InMemorySessionStore`**; release on eviction |
 
-**Grilling status:** frontier empty. Implementation must not start until the user explicitly says to proceed (TDD via project `sdd` / separate test + implementer agents as usual).
+**Grilling status:** frontier empty. Implementation complete (see Done checklist).
 
-### Implementation sketch (agreed, not yet built)
+### Implementation sketch (built)
 
 **A — `InMemorySessionStore`**
 
@@ -1662,7 +1663,7 @@ Also in the same docs pass (cheap, same milestone narrative): the README **Statu
 
 ### Open decisions
 
-None — grilling complete. Implementation done; await user decision on commit / next steps.
+None — grilling and implementation complete; merged to `main` via PR #27 (and related M10 PRs).
 
 ### Done checklist (this follow-up)
 
@@ -1673,7 +1674,7 @@ None — grilling complete. Implementation done; await user decision on commit /
 - [x] OpenAPI `503` on create + simulate
 - [x] README Status aligned with Roadmap
 - [x] Reviewer APPROVE after eviction/save/handoff release fixes
-- [ ] Commit (needs explicit user confirmation)
+- [x] Commit / merge — PR #27 (`[MILESTONE-10] session: harden admission, retention, and observability`)
 
 ### Non-goals for this follow-up
 
