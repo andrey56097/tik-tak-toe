@@ -19,12 +19,8 @@ repositories {
 }
 
 dependencies {
-    // Serves src/main/resources/static. This module has no controllers: the page
-    // talks to the session service directly from the browser.
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
-    // Registers as UI-SERVICE so the Gateway (Milestone 6) can route lb://UI-SERVICE.
-    // Nothing here resolves anything through Eureka.
     implementation("org.springframework.cloud:spring-cloud-starter-netflix-eureka-client")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
@@ -38,4 +34,41 @@ dependencyManagement {
 
 tasks.named<Test>("test") {
     useJUnitPlatform()
+}
+
+// Gradle daemons may not inherit npm's shell PATH.
+fun npmExecutable(): String {
+    val fromPath = (System.getenv("PATH") ?: "").split(File.pathSeparator)
+    val commonPrefixes = listOf("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin")
+    return (fromPath + commonPrefixes).asSequence()
+        .filter { it.isNotBlank() }
+        .map { File(it, "npm") }
+        .firstOrNull { it.canExecute() }
+        ?.absolutePath
+        ?: "npm"
+}
+
+val npmCi = tasks.register<Exec>("npmCi") {
+    description = "Installs the test-only JS toolchain from the committed lockfile."
+    workingDir = projectDir
+    commandLine(npmExecutable(), "ci", "--no-audit", "--no-fund")
+    inputs.file("package.json")
+    inputs.file("package-lock.json")
+    outputs.dir("node_modules")
+}
+
+val npmTest = tasks.register<Exec>("npmTest") {
+    description = "Runs the Vitest suite for the static page."
+    group = "verification"
+    dependsOn(npmCi)
+    workingDir = projectDir
+    commandLine(npmExecutable(), "test", "--silent")
+    inputs.dir("src/main/resources/static")
+    inputs.dir("src/test/javascript")
+    inputs.file("vitest.config.js")
+    outputs.upToDateWhen { false }
+}
+
+tasks.named("check") {
+    dependsOn(npmTest)
 }

@@ -1,0 +1,14 @@
+{
+  "name": "tiktaktoe-ui",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Test-only toolchain for the static board page. The page itself has no build step: what is served is exactly what is in src/main/resources/static.",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "jsdom": "^28.0.0",
+    "vitest": "^4.0.0"
+  }
+}
