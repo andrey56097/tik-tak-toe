@@ -32,7 +32,8 @@
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
   - [Build](#build)
-  - [Run](#run)
+  - [Run with Docker](#run-with-docker)
+  - [Run from source](#run-from-source)
   - [Test](#test)
 - [Project Structure](#project-structure)
 - [API Surface](#api-surface)
@@ -174,14 +175,14 @@ POST /sessions  ──▶  session starts  ──▶  Game Session creates a gam
 
 ## Getting Started
 
-> **Note:** each service is started on its own port for now — Eureka `8761`, Engine `8081`, Session `8082`, UI `8083`. Once Milestone 9 lands, the whole stack starts with `docker-compose up` — see [Roadmap](#roadmap).
+> **Two ways in.** [Run with Docker](#run-with-docker) starts the whole stack with one command and puts everything behind `localhost:8080`. [Run from source](#run-from-source) starts each service in its own terminal on its own port — Eureka `8761`, Gateway `8080`, Engine `8081`, Session `8082`, UI `8083` — which is what you want while developing. **Do not do both at once**: see the warning at the end of the Docker section.
 
 ### Prerequisites
 
 | Requirement | Version |
 |------|------|
 | [JDK](https://adoptium.net/) | **21** or newer (toolchain pinned to 21) |
-| Docker + Compose | Latest *(needed from Milestone 9; not required for a local run)* |
+| Docker + Compose | Any current version *(required only for [Run with Docker](#run-with-docker); a source run needs no Docker, and a Docker run needs no JDK)* |
 | Gradle | **Not needed** — the repo ships a pinned [Gradle Wrapper](https://docs.gradle.org/current/userguide/gradle_wrapper.html) |
 
 Verify your environment:
@@ -202,7 +203,53 @@ that service's own `build/libs/` — e.g. `game-engine-service/build/libs/`. The
 is no jar at the repository root: the root is a Gradle settings file that
 aggregates the modules, not an application.
 
-### Run
+### Run with Docker
+
+```bash
+docker compose up --build
+```
+
+That is the whole thing. Compose builds one image per service from
+[`docker/Dockerfile`](docker/Dockerfile), starts all five on a private network
+and waits for each to report healthy before starting the ones that depend on it.
+Then open **<http://localhost:8080>**.
+
+The **first** build takes around ten minutes: the jars are compiled *inside* the
+images, so a clean machine needs no JDK and no prior `./gradlew build`, and the
+five builds run one at a time because they share a locked Gradle cache. Later
+runs start in seconds. Stop everything with `docker compose down`.
+
+**Only two ports are published**, and that is the point of the design:
+
+| URL | What |
+|---|---|
+| **<http://localhost:8080>** | Everything the browser needs — the board, the `/sessions` API and the SSE stream, all through the gateway |
+| <http://localhost:8761> | The Eureka dashboard, to see all four services registered |
+
+Engine, Session and UI are reachable only from inside the compose network. The
+browser never learns their ports — that is what the gateway is for.
+
+To check a stack without opening a browser:
+
+```bash
+./scripts/smoke.sh
+```
+
+It brings the stack up, creates a session through the gateway, plays it to a
+finish, prints the result and tears everything down — exiting non-zero if any of
+that fails. `KEEP_UP=true ./scripts/smoke.sh` leaves the stack running instead.
+
+> **Stop the source-run stack before `docker compose up`.** Compose publishes
+> Eureka on `8761`, and every `application.yml` points at
+> `http://localhost:8761/eureka/` — so a service you started from source
+> registers itself into the *containerised* registry as a second instance of the
+> same service id, under your machine's LAN address. The gateway then alternates
+> between the container (which answers) and your host (which it cannot reach
+> from inside the network), and every second request fails with a 500. The
+> symptom looks like a page that loads without styles. `docker compose restart
+> eureka-server` clears the stale entries once the host processes are stopped.
+
+### Run from source
 
 These are independent Spring Boot applications with no shared root project, so
 there is no single "start the app" command. Start them in this order — Eureka
@@ -214,12 +261,15 @@ terminal**, because every one of these commands blocks:
 ./gradlew :game-engine-service:bootRun    # :8081  rules + H2
 ./gradlew :game-session-service:bootRun   # :8082  orchestrator
 ./gradlew :ui-service:bootRun             # :8083  the board page
+./gradlew :gateway:bootRun                # :8080  single entry point
 ```
 
-Then open **<http://localhost:8083>** and press *Start Simulation*.
+Then open **<http://localhost:8080>** and press *Start Simulation*. The UI is
+still served directly on `8083`, but going through the gateway is what the
+browser does in every other setup, so it is the honest way to run it.
 
 > **Do not run `./gradlew bootRun` from the repository root.** The task exists in
-> every module, so Gradle would try to start all four inside one build and block
+> every module, so Gradle would try to start all five inside one build and block
 > on the first — the rest never start.
 
 Give Eureka a few seconds before the others: a service that starts while the
@@ -298,7 +348,10 @@ tik-tak-toe/
 ├── gateway/                 # Spring Cloud Gateway — single entry point :8080
 ├── game-engine-service/     # Game rules, validation, H2 persistence   :8081
 ├── game-session-service/    # Orchestrator: auto-play loop            :8082
-└── ui-service/              # Serves the static HTML/CSS/JS board      :8083
+├── ui-service/              # Serves the static HTML/CSS/JS board      :8083
+├── docker/Dockerfile        # One multi-stage recipe, built once per service
+├── docker-compose.yml       # The five services, one network, one command
+└── scripts/smoke.sh         # Up → play a game through :8080 → down
 ```
 
 ---
@@ -368,7 +421,7 @@ logically, not where their priority would put them.
 | 6 | Gateway | optional | Everything reachable through `localhost:8080` |
 | 7 | Testing & validation | **required** | Integration, error-handling, and concurrency suite |
 | 8 | CI (build + test + quality) | beyond scope | GitHub Actions on every push/PR: build, unit + mutation tests, quality checks |
-| 9 | Docker + docker-compose | beyond scope | Whole stack up with one command |
+| 9 | Docker + docker-compose | beyond scope | Whole stack up with one command — see [Run with Docker](#run-with-docker) |
 | 10 | Final polish & submission | **required** | README, code style, end-to-end verification |
 | 11 | Kubernetes readiness | beyond scope | Manifests to deploy the stack to a cluster when needed |
 
