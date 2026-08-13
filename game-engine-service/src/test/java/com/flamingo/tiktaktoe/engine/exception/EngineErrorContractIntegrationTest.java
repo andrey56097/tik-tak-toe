@@ -157,7 +157,9 @@ class EngineErrorContractIntegrationTest {
                 .andExpect(jsonPath("$.timestamp").exists())
                 .andExpect(jsonPath("$.status").value(405))
                 .andExpect(jsonPath("$.error").value("Method Not Allowed"))
-                .andExpect(jsonPath("$.message").exists())
+                // Pinned, not merely present: the body used to carry ex.getMessage(),
+                // which CLAUDE.md forbids. `exists()` would not have caught that.
+                .andExpect(jsonPath("$.message").value("Method not allowed"))
                 .andExpect(jsonPath("$.path").value("/games/" + id));
     }
 

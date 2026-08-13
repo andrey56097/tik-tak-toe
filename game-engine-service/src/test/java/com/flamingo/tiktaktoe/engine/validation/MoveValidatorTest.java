@@ -29,8 +29,8 @@ class MoveValidatorTest {
 
     @Test
     void acceptsEmptyCellWithinBounds() {
-        assertThat(validator.canPlay(emptyBoard(), CellState.X, 0, 0)).isTrue();
-        assertThat(validator.canPlay(emptyBoard(), CellState.O, 2, 2)).isTrue();
+        assertThat(validator.canPlay(emptyBoard(), 0, 0)).isTrue();
+        assertThat(validator.canPlay(emptyBoard(), 2, 2)).isTrue();
     }
 
     @Test
@@ -40,15 +40,37 @@ class MoveValidatorTest {
                 List.of(CellState.EMPTY, CellState.EMPTY, CellState.EMPTY),
                 List.of(CellState.EMPTY, CellState.EMPTY, CellState.EMPTY)
         );
-        assertThat(validator.canPlay(board, CellState.O, 0, 0)).isFalse();
+        assertThat(validator.canPlay(board, 0, 0)).isFalse();
+    }
+
+    @Test
+    void xAndOArePlayerSymbols() {
+        assertThat(validator.isPlayerSymbol(CellState.X)).isTrue();
+        assertThat(validator.isPlayerSymbol(CellState.O)).isTrue();
+    }
+
+    /**
+     * EMPTY is expressible in {@code MoveRequest.player} because the field is
+     * typed {@code CellState}, which doubles as the board's cell type. It is not
+     * a symbol anyone can play, and it has to be rejected as bad input rather
+     * than falling through to the turn check and being reported as a conflict.
+     */
+    @Test
+    void emptyIsNotAPlayerSymbol() {
+        assertThat(validator.isPlayerSymbol(CellState.EMPTY)).isFalse();
+    }
+
+    @Test
+    void nullIsNotAPlayerSymbol() {
+        assertThat(validator.isPlayerSymbol(null)).isFalse();
     }
 
     @Test
     void rejectsOutOfBounds() {
         List<List<CellState>> board = emptyBoard();
-        assertThat(validator.canPlay(board, CellState.X, -1, 0)).isFalse();
-        assertThat(validator.canPlay(board, CellState.X, 3, 0)).isFalse();
-        assertThat(validator.canPlay(board, CellState.X, 0, -1)).isFalse();
-        assertThat(validator.canPlay(board, CellState.X, 0, 3)).isFalse();
+        assertThat(validator.canPlay(board, -1, 0)).isFalse();
+        assertThat(validator.canPlay(board, 3, 0)).isFalse();
+        assertThat(validator.canPlay(board, 0, -1)).isFalse();
+        assertThat(validator.canPlay(board, 0, 3)).isFalse();
     }
 }

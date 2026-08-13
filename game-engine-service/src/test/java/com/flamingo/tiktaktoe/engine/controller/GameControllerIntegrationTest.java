@@ -99,6 +99,57 @@ class GameControllerIntegrationTest {
                 .andExpect(status().isConflict());
     }
 
+    /**
+     * {@code MoveRequest.player} is typed {@code CellState}, so "EMPTY" is a
+     * syntactically valid body. It used to reach the turn check and come back as
+     * {@code 409 "Not EMPTY's turn"} — a conflict status and a nonsense message
+     * for what is plainly bad input.
+     */
+    @Test
+    void makeMoveWithEmptyAsPlayerIsRejectedAsBadRequest() throws Exception {
+        String id = createGame();
+        mockMvc.perform(post("/games/{id}/move", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"player\":\"EMPTY\",\"row\":0,\"col\":0}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value(
+                        org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("turn"))));
+    }
+
+    /**
+     * A body with no {@code player} at all. This is what {@code @NotNull} on
+     * {@code MoveRequest.player} is for — asserted here, where a validator
+     * actually runs, rather than by inspecting the annotation in {@code common}.
+     */
+    @Test
+    void makeMoveWithoutAPlayerIsRejectedByBeanValidation() throws Exception {
+        String id = createGame();
+        mockMvc.perform(post("/games/{id}/move", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"row\":0,\"col\":0}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value(
+                        org.hamcrest.Matchers.containsString("player")));
+    }
+
+    /**
+     * The move endpoint is an upsert, so a body that is rejected must be rejected
+     * before the upsert runs — otherwise a bad request leaves a game behind.
+     */
+    @Test
+    void aMoveRejectedForItsSymbolLeavesNoGameBehind() throws Exception {
+        String id = "empty-player-no-game-" + java.util.UUID.randomUUID();
+        mockMvc.perform(post("/games/{id}/move", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"player\":\"EMPTY\",\"row\":0,\"col\":0}"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(get("/games/{id}", id))
+                .andExpect(status().isNotFound());
+    }
+
     @Test
     void makeMoveCreatesGameWhenIdWasNeverCreated() throws Exception {
         String id = "never-created-" + java.util.UUID.randomUUID();

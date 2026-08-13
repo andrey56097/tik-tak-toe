@@ -10,6 +10,7 @@ import com.flamingo.tiktaktoe.engine.exception.GameConflictException;
 import com.flamingo.tiktaktoe.engine.exception.GameNotFoundException;
 import com.flamingo.tiktaktoe.engine.exception.InvalidMoveException;
 import com.flamingo.tiktaktoe.engine.mapper.GameMapper;
+import com.flamingo.tiktaktoe.engine.metrics.EngineMetrics;
 import com.flamingo.tiktaktoe.engine.repository.GameRepository;
 import com.flamingo.tiktaktoe.engine.validation.MoveValidator;
 import com.flamingo.tiktaktoe.engine.validation.WinnerChecker;
@@ -23,6 +24,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class GameEngineServiceTest {
@@ -37,7 +40,8 @@ class GameEngineServiceTest {
         mapper = new GameMapper(new ObjectMapper());
         MoveValidator validator = new MoveValidator();
         WinnerChecker winnerChecker = new WinnerChecker();
-        service = new GameEngineService(repository, mapper, validator, winnerChecker);
+        service = new GameEngineService(repository, mapper, validator, winnerChecker,
+                new EngineMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()));
     }
 
     private GameEntity newGame() {
@@ -90,6 +94,31 @@ class GameEngineServiceTest {
                 .isInstanceOf(GameConflictException.class);
     }
 
+    /**
+     * EMPTY is not a player, so this is bad input (400), not a turn conflict
+     * (409). The check has to run before the turn check, which is what makes the
+     * distinction observable — otherwise EMPTY is reported as "not EMPTY's turn".
+     */
+    @Test
+    void makeMoveRejectsEmptyAsPlayerAsInvalidRatherThanAsAConflict() {
+        // No repository stub on purpose: the guard runs before the game is loaded,
+        // which is the point of the change and what the next test pins down.
+        assertThatThrownBy(() -> service.makeMove("g1", new MoveRequest(CellState.EMPTY, 0, 0)))
+                .isInstanceOf(InvalidMoveException.class);
+    }
+
+    /**
+     * The symbol check runs before the game is loaded, so a rejected move cannot
+     * create a game as a side effect of the upsert.
+     */
+    @Test
+    void anInvalidSymbolNeitherLoadsNorCreatesAGame() {
+        assertThatThrownBy(() -> service.makeMove("brand-new", new MoveRequest(CellState.EMPTY, 0, 0)))
+                .isInstanceOf(InvalidMoveException.class);
+        verify(repository, never()).findById(any());
+        verify(repository, never()).save(any());
+    }
+
     @Test
     void makeMoveAllowsOTurnAfterX() {
         when(repository.findById("g1")).thenReturn(Optional.of(newGame()));
@@ -126,6 +155,39 @@ class GameEngineServiceTest {
         GameState state = service.makeMove("g1", new MoveRequest(CellState.X, 0, 2));
         assertThat(state.status()).isEqualTo(GameStatus.WIN);
         assertThat(state.winner()).isEqualTo(CellState.X);
+    }
+
+    /**
+     * A finished game has no next player. Advancing the turn unconditionally left
+     * the API telling clients it was the loser's move on a game nobody can move
+     * in — a small lie, but one that ships in every response for that game.
+     */
+    @Test
+    void aWinningMoveDoesNotHandTheTurnToTheLoser() {
+        GameEntity game = newGame();
+        game.setBoard("[[\"X\",\"X\",\"EMPTY\"],[\"O\",\"O\",\"EMPTY\"],[\"EMPTY\",\"EMPTY\",\"EMPTY\"]]");
+        when(repository.findById("g1")).thenReturn(Optional.of(game));
+        when(repository.save(any(GameEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        GameState state = service.makeMove("g1", new MoveRequest(CellState.X, 0, 2));
+
+        assertThat(state.status()).isEqualTo(GameStatus.WIN);
+        assertThat(state.nextTurn())
+                .as("the turn stays with the player who won, rather than moving on")
+                .isEqualTo(CellState.X);
+    }
+
+    @Test
+    void aDrawingMoveDoesNotAdvanceTheTurnEither() {
+        GameEntity game = newGame();
+        game.setBoard("[[\"X\",\"O\",\"X\"],[\"X\",\"O\",\"O\"],[\"O\",\"X\",\"EMPTY\"]]");
+        when(repository.findById("g1")).thenReturn(Optional.of(game));
+        when(repository.save(any(GameEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        GameState state = service.makeMove("g1", new MoveRequest(CellState.X, 2, 2));
+
+        assertThat(state.status()).isEqualTo(GameStatus.DRAW);
+        assertThat(state.nextTurn()).isEqualTo(CellState.X);
     }
 
     @Test

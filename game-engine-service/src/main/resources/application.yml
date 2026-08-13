@@ -6,10 +6,16 @@ spring:
     driver-class-name: org.h2.Driver
   h2:
     console:
-      enabled: true
+      # Off by default: a full SQL surface has no reason to exist in a shipped
+      # image. H2_CONSOLE_ENABLED=true for local debugging.
+      enabled: ${H2_CONSOLE_ENABLED:false}
   jpa:
     hibernate:
       ddl-auto: update
+    # Off explicitly: the default keeps a persistence context open through response
+    # rendering, hiding lazy loads in the view layer. Spring warns about it on every
+    # start — this is the answer.
+    open-in-view: false
 
 server:
   port: 8081
@@ -25,4 +31,21 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics,prometheus
+  # Prometheus is scraped, not pushed, so the stack needs no external service to
+  # run. Datadog later would be a registry swap, not a rewrite.
+  tracing:
+    sampling:
+      # A development setting: a sampled-away trace is useless when the point is to
+      # follow one session end to end. Lower it when traffic is real.
+      probability: 1.0
+  otlp:
+    tracing:
+      # Empty by default, so no collector has to exist for the stack to come up.
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:}
+
+logging:
+  pattern:
+    # The ids that let a line in one service be joined to the line it caused in the other.
+    level: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]"
+
