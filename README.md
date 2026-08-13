@@ -462,20 +462,20 @@ service discovery, an API gateway and real-time updates as *optional
 enhancements*. Optional stages are still built — they are ordered where they fit
 logically, not where their priority would put them.
 
-| # | Milestone | Scope | Result |
-|---|---|---|---|
-| 0 | Environment & monorepo skeleton | enabler | 5 independent Spring Boot projects + `common` module |
-| 1 | **Game Engine Service + H2** | **required** | Rules, validation, error handling, persistence — fully tested |
-| 2 | Eureka Server + registration | optional | Engine visible in the service registry |
-| 3 | **Game Session Service** | **required** | Orchestrator that plays a full game automatically |
-| 4 | **UI Service** | **required** | Browser page rendering the live board, kept current by polling |
-| 5 | SSE push Session → UI | optional | The board updates the instant a move lands, with no polling traffic |
-| 6 | Gateway | optional | Everything reachable through `localhost:8080` |
-| 7 | Testing & validation | **required** | Integration, error-handling, and concurrency suite — **done** |
-| 8 | CI (build + test + quality) | beyond scope | GitHub Actions on every push/PR: build, unit + mutation tests, quality checks |
-| 9 | Docker + docker-compose | beyond scope | Whole stack up with one command — see [Run with Docker](#run-with-docker) |
-| 10 | Final polish & submission | **required** | README, code style, end-to-end verification |
-| 11 | Kubernetes readiness | beyond scope | Manifests that deploy the stack to a cluster — see [Run on Kubernetes](#run-on-kubernetes) |
+| # | Milestone | Scope | Status | Result |
+|---|---|---|---|---|
+| 0 | Environment & monorepo skeleton | enabler | ✅ | 5 independent Spring Boot projects + `common` module |
+| 1 | **Game Engine Service + H2** | **required** | ✅ | Rules, validation, error handling, persistence — fully tested |
+| 2 | Eureka Server + registration | optional | ✅ | Engine visible in the service registry |
+| 3 | **Game Session Service** | **required** | ✅ | Orchestrator that plays a full game automatically |
+| 4 | **UI Service** | **required** | ✅ | Browser page rendering the live board, kept current by polling |
+| 5 | SSE push Session → UI | optional | ✅ | The board updates the instant a move lands, with no polling traffic |
+| 6 | Gateway | optional | ✅ | Everything reachable through `localhost:8080` |
+| 7 | Testing & validation | **required** | ✅ | Integration, error-handling, and concurrency suite |
+| 8 | CI (build + test + quality) | beyond scope | ✅ | GitHub Actions on every push/PR: build, unit + mutation tests, quality checks |
+| 9 | Docker + docker-compose | beyond scope | ✅ | Whole stack up with one command — see [Run with Docker](#run-with-docker) |
+| 10 | Final polish & submission | **required** | 🔜 | README, code style, end-to-end verification — the only stage still open |
+| 11 | Kubernetes readiness | beyond scope | ✅ | Manifests that deploy the stack to a cluster — see [Run on Kubernetes](#run-on-kubernetes) |
 
 Full details — version decisions, design patterns, and the assignment-requirements matrix — live in **[docs/tic-tac-toe-plan.md](docs/tic-tac-toe-plan.md)**.
 

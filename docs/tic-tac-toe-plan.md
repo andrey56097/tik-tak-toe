@@ -460,7 +460,7 @@ traffic; the UI code above `render(state)` is unchanged.
 ### Milestone 6 — Gateway *(optional — `task.md` “Service Discovery / API Gateway”)*
 - [x] Stand up Spring Cloud Gateway (port 8080)
 - [x] Route to `GAME-SESSION-SERVICE` (`/sessions/**`)
-- [ ] Route to `GAME-ENGINE-SERVICE` (`/games/**`) — optional, for direct access/debugging
+- [x] ~~Route to `GAME-ENGINE-SERVICE` (`/games/**`) — optional, for direct access/debugging~~ → **deliberately not routed.** Rejected in `.claude/plans/milestone-6-gateway.md`: it would put a move-submitting endpoint on the public entry point, giving the browser a second way to make a move that bypasses `GameSessionOrchestrator` — a game under auto-play could change beneath the orchestrator's feet. The Engine stays reachable to Session via `lb://GAME-ENGINE-SERVICE` and to a developer directly on `:8081`; the only cost is that the Engine's Swagger UI isn't served from `:8080`, which is fine since docs are per-service by design
 - [x] Route to `UI-SERVICE` (`/**`, lowest priority)
 - [x] Confirm the SSE route streams rather than buffers — a gateway that buffers the response would break `text/event-stream`
 - [x] **Remove the CORS configuration added in Milestone 4** — everything is served from `localhost:8080`, so the page and the API are same-origin and CORS becomes dead configuration
@@ -505,31 +505,31 @@ This milestone closes the assignment's **"Testing & Validation"** section entire
 ---
 
 ### Milestone 8 — CI (Continuous Integration) *(beyond `task.md`)*
-- [ ] GitHub Actions workflow: on every push/PR — `./gradlew build` (compiles + runs tests) for each service
-- [ ] Run unit tests + mutation tests (Pitest) in CI; a failed check marks the PR red
-- [ ] Quality checks: `./gradlew check` (or lint/spotless if configured)
-- [ ] Verify that a PR cannot be merged if CI is red (branch protection / required status check, if enabled)
+- [x] GitHub Actions workflow: on every push/PR — `./gradlew build` (compiles + runs tests) for each service — `.github/workflows/ci.yml`, one `build` job running `./gradlew build --continue` across all six modules, plus a manifest gate (`kubectl kustomize k8s/` piped through kubeconform) that runs first because it costs seconds
+- [x] Run unit tests + mutation tests (Pitest) in CI; a failed check marks the PR red — `build` implies `check`, and `check` depends on `pitest` in both gated modules; test/JaCoCo/Pitest reports upload as artifacts on failure
+- [x] Quality checks: `./gradlew check` (or lint/spotless if configured) — covered by the same `build` invocation: coverage floor (JaCoCo 80 %) + mutation floor (Pitest 80 %)
+- [x] Verify that a PR cannot be merged if CI is red (branch protection / required status check, if enabled) — branch protection on `main` requires the `build` context, with strict (up-to-date) mode and force-push/deletion blocked. The job id is therefore load-bearing: renaming it silently removes the gate
 
 **Result:** every push/PR is automatically built and tested; quality gates run before merge.
 
 ---
 
 ### Milestone 9 — Docker + docker-compose *(beyond `task.md`)*
-- [ ] `Dockerfile` for each of the 5 services (one image per service)
-- [ ] `docker-compose.yml` at the root with all services, correct startup order (`depends_on`), and a shared network
-- [ ] Verify a full startup with a single command `docker-compose up` — containers are **isolated** (each in its own container) but **communicate over the shared compose network by service name** (e.g. `http://engine:8081`), not `localhost`
-- [ ] Verify shutdown with `docker-compose down`
+- [x] `Dockerfile` for each of the 5 services (one image per service) — five images (`tiktaktoe/<service>:dev`), built from **one** parameterised multi-stage `docker/Dockerfile` rather than five near-identical copies (DRY: the modules differ only by name, so five files would be five places to fix one base-image bump)
+- [x] `docker-compose.yml` at the root with all services, correct startup order (`depends_on`), and a shared network — ordering is `depends_on: condition: service_healthy` against a real `/actuator/health` probe, not bare `depends_on` (a started container is not a ready one). No `networks:` block on purpose: compose puts all five on a project-scoped default network already
+- [x] Verify a full startup with a single command `docker-compose up` — containers are **isolated** (each in its own container) but **communicate over the shared compose network by service name** (e.g. `http://engine:8081`), not `localhost` — verified 2026-08-13: all five `healthy`, ordering held eureka → engine/ui → session → gateway, every instance registered in Eureka by container IP, a full game played through the gateway (9 moves, WIN), SSE streamed unbuffered through it. `scripts/smoke.sh` reproduces the check without a browser
+- [x] Verify shutdown with `docker-compose down` — no containers and no network left behind
 
 **Result:** the whole stack comes up with one command on a clean machine; no manual per-container startup — compose handles ordering, networking, and isolation.
 
 ---
 
 ### Milestone 10 — Final polish and Submission Guidelines *(**required** — `task.md` submission checklist)*
-- [ ] README.md: architecture, diagrams, run instructions (`docker-compose up`), test instructions (`./gradlew test`)
+- [x] README.md: architecture, diagrams, run instructions (`docker-compose up`), test instructions (`./gradlew test`) — landed incrementally with the milestones that created each path (Architecture + mermaid diagrams, Run with Docker / on Kubernetes / from source, Test + a Gradle task reference, API Surface, CI). Milestone 10 re-reads it end to end rather than writing it from scratch
 - [ ] Code style check / comments in key places (validation, orchestration, error handling) — under "adheres to Spring Boot best practices"
-- [ ] A "Possible improvements / alternative approaches" section in the README (optional per the assignment, but easily covered with 5–6 items: minimax, message broker, persistent H2 instead of in-memory, multiple parallel game sessions, etc.)
+- [x] A "Possible improvements / alternative approaches" section in the README (optional per the assignment, but easily covered with 5–6 items: minimax, message broker, persistent H2 instead of in-memory, multiple parallel game sessions, etc.) — README §Possible Improvements, split into *Known gaps* (the debt each milestone reported rather than fixed) and *Optional direction*
 - [ ] Final end-to-end run of the full game cycle several times in a row
-- [ ] (optional) Retry via built-in `@Retryable` (Spring Boot 4) on Session → Engine calls; a Circuit Breaker via `resilience4j-spring-boot4` if needed
+- [x] (optional) Retry via built-in `@Retryable` (Spring Boot 4) on Session → Engine calls; a Circuit Breaker via `resilience4j-spring-boot4` if needed — `@Retryable` on `RestGameEngineClient`, transient failures only (4xx explicitly excluded, since retrying a 409 is a bug); no circuit breaker, which nothing here has needed
 - [ ] (optional) Logging with `gameId`/`sessionId` in MDC
 
 **Result:** the project is ready for submission — code, tests, documentation, demo.
