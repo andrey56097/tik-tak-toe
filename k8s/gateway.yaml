@@ -1,0 +1,93 @@
+# The single door. Milestone 6 made 8080 the only port a browser ever talks to,
+# and the Ingress in ingress.yaml points here and nowhere else — which is what
+# keeps that property true inside a cluster.
+#
+# See eureka-server.yaml for the probe, resource and securityContext reasoning.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gateway
+  template:
+    metadata:
+      labels:
+        app: gateway
+    spec:
+      containers:
+        - name: gateway
+          image: tiktaktoe/gateway:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          # The gateway is a Eureka *client* like the others: its routes are
+          # `lb://GAME-SESSION-SERVICE` and `lb://UI-SERVICE`, resolved through
+          # the registry rather than through cluster DNS. Point those at Service
+          # names and this ConfigMap is what stops being needed.
+          envFrom:
+            - configMapRef:
+                name: eureka-client
+          env:
+            - name: SERVER_PORT
+              value: "8080"
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 2
+            failureThreshold: 45
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 10
+            # Above the 1s default: this node runs five JVMs on two CPUs, each
+            # capped at one, so CFS throttling can stall a cheap in-memory read
+            # for longer than a second. A restart is an expensive answer to a
+            # scheduling hiccup.
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # Readiness here means "the process is up", not "the registry has been
+          # fetched" — so for a few seconds after startup this Pod can accept a
+          # request it cannot yet route, and answer 503. That is the cost of
+          # client-side discovery behind a Service, and it closes itself within
+          # one registry fetch (5s, set in the ConfigMap).
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 100m
+            limits:
+              memory: 768Mi
+              cpu: "1"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            runAsNonRoot: true
+            runAsUser: 10001
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+spec:
+  # ClusterIP, not NodePort or LoadBalancer: the Ingress is the external edge,
+  # and a second way in would undo the single-entry-point property Milestone 6
+  # established. `kubectl port-forward svc/gateway 8080:8080` reaches it without
+  # one, which is the sudo-free path the smoke script uses.
+  selector:
+    app: gateway
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

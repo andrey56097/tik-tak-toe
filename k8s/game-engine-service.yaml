@@ -1,0 +1,96 @@
+# The rules engine and its H2 database.
+#
+# The probe, resource and securityContext blocks below are identical to
+# eureka-server.yaml on purpose, and the reasoning for every one of them is
+# written out there, once, rather than copied five times. What differs per
+# service is only the name, the port, and whether it consumes the Eureka client
+# ConfigMap — which is exactly the shape docker-compose.yml has.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: game-engine-service
+spec:
+  # H2 runs in-memory *inside this Pod*, so a second replica would be a second
+  # database holding different games, not a scaled-out engine. Replicas here wait
+  # on a shared datastore, not on a Deployment field.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: game-engine-service
+  template:
+    metadata:
+      labels:
+        app: game-engine-service
+    spec:
+      containers:
+        - name: game-engine-service
+          image: tiktaktoe/game-engine-service:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8081
+          # Nothing sequences this Pod after the registry, and nothing needs to:
+          # if eureka-server is not up yet, the Eureka client logs a warning and
+          # retries on its own schedule, while this Pod's readinessProbe keeps it
+          # out of its Service's endpoints until it can actually serve. Ordering
+          # emerges from retries — which is how a cluster is meant to converge —
+          # so there is no initContainer and no wait-for script anywhere here.
+          envFrom:
+            - configMapRef:
+                name: eureka-client
+          env:
+            - name: SERVER_PORT
+              value: "8081"
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 2
+            failureThreshold: 45
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 10
+            # Above the 1s default: this node runs five JVMs on two CPUs, each
+            # capped at one, so CFS throttling can stall a cheap in-memory read
+            # for longer than a second. A restart is an expensive answer to a
+            # scheduling hiccup.
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 100m
+            limits:
+              memory: 768Mi
+              cpu: "1"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            runAsNonRoot: true
+            runAsUser: 10001
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: game-engine-service
+spec:
+  # Deliberately unused by the session service, which reaches the engine through
+  # Eureka by service id (`engine.client.base-url: http://GAME-ENGINE-SERVICE`).
+  # It exists so the engine is reachable for debugging and port-forwarding, and
+  # so the day discovery moves to Kubernetes is a configuration change rather
+  # than a new manifest.
+  selector:
+    app: game-engine-service
+  ports:
+    - name: http
+      port: 8081
+      targetPort: http

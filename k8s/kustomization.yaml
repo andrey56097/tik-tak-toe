@@ -1,0 +1,60 @@
+# Applied with `kubectl apply -k k8s/` — kustomize ships inside kubectl, so this
+# adds no tool to install.
+#
+# Why kustomize at all, when the roadmap only asked for manifests: `kubectl apply
+# -f k8s/` applies files in *alphabetical* order, which puts configmap.yaml ahead
+# of namespace.yaml and fails the apply on a fresh cluster. kustomize orders by
+# resource kind (namespaces first), so the ordering stops depending on what the
+# files happen to be called. It also puts the namespace, the shared label and the
+# image tags in one place instead of nine.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Every resource below lands here, so none of them repeats a namespace field —
+# and `kubectl delete -k k8s/` is guaranteed to be scoped to this stack. The
+# cluster this is developed against already hosts unrelated work in `default`.
+namespace: tik-tak-toe
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: tik-tak-toe
+    # Selectors are immutable once a Deployment exists, so a label added to them
+    # today cannot be changed tomorrow without deleting the Deployment. The
+    # per-service `app:` labels already select correctly; this one is for humans
+    # running `kubectl get all -l app.kubernetes.io/part-of=tik-tak-toe`.
+    includeSelectors: false
+    # Without this the label stops at the Deployment and never reaches the pod
+    # template — so Pods and ReplicaSets do not carry it, and the very `kubectl
+    # get all -l ...` above returns everything *except* the Pods you wanted. It
+    # labels the template only; `matchLabels` stays untouched, which is what
+    # keeps the immutable selector safe.
+    includeTemplates: true
+
+# Listed in the order a human would read them, not an order kustomize needs:
+# it sorts by resource kind when it applies, which is the whole reason this file
+# exists. secret.yaml.example is absent on purpose — see the file itself.
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - eureka-server.yaml
+  - game-engine-service.yaml
+  - game-session-service.yaml
+  - ui-service.yaml
+  - gateway.yaml
+  - ingress.yaml
+
+# One place to retag all five images — `newTag: dev` matches what
+# `docker compose build` produces and `minikube image load` pushes into the node.
+# Pointing a real deployment at a registry build becomes an edit here, not five
+# edits across the Deployments.
+images:
+  - name: tiktaktoe/eureka-server
+    newTag: dev
+  - name: tiktaktoe/game-engine-service
+    newTag: dev
+  - name: tiktaktoe/game-session-service
+    newTag: dev
+  - name: tiktaktoe/ui-service
+    newTag: dev
+  - name: tiktaktoe/gateway
+    newTag: dev

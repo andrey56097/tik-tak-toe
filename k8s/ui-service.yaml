@@ -1,0 +1,83 @@
+# Serves the board page and its static assets. It renders from full state on
+# every update, which is what makes the transport swappable — and why this Pod
+# needs nothing from Kubernetes beyond a name and a port.
+#
+# See eureka-server.yaml for the probe, resource and securityContext reasoning.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ui-service
+spec:
+  # This one is genuinely stateless and could scale. It stays at one replica for
+  # symmetry with the rest of the stack and because nothing here is under load;
+  # raising it is a one-word change with no other consequence.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ui-service
+  template:
+    metadata:
+      labels:
+        app: ui-service
+    spec:
+      containers:
+        - name: ui-service
+          image: tiktaktoe/ui-service:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8083
+          envFrom:
+            - configMapRef:
+                name: eureka-client
+          env:
+            - name: SERVER_PORT
+              value: "8083"
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 2
+            failureThreshold: 45
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 10
+            # Above the 1s default: this node runs five JVMs on two CPUs, each
+            # capped at one, so CFS throttling can stall a cheap in-memory read
+            # for longer than a second. A restart is an expensive answer to a
+            # scheduling hiccup.
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 100m
+            limits:
+              memory: 768Mi
+              cpu: "1"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            runAsNonRoot: true
+            runAsUser: 10001
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ui-service
+spec:
+  selector:
+    app: ui-service
+  ports:
+    - name: http
+      port: 8083
+      targetPort: http
