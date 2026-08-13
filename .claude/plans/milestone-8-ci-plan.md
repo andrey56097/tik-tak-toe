@@ -4,7 +4,7 @@
 
 **Goal:** Every push to `main` and every pull request is automatically built and gated by GitHub Actions, and a red build makes the PR unmergeable.
 
-**Architecture:** One workflow file, one job, one command — `./gradlew build` from the repository root. The root `settings.gradle.kts` includes all six modules, and Gradle's `build` lifecycle already implies `check`, which in `game-engine-service` and `game-session-service` already depends on `jacocoTestCoverageVerification` and `pitest`. The quality gates therefore come for free: **no Gradle file is touched by this milestone.** GitHub branch protection turns the resulting `build` status check into a merge gate.
+**Architecture:** One workflow file, one job, one command — `./gradlew build` from the repository root. The root `../../settings.gradle.kts` includes all six modules, and Gradle's `build` lifecycle already implies `check`, which in `game-engine-service` and `game-session-service` already depends on `jacocoTestCoverageVerification` and `pitest`. The quality gates therefore come for free: **no Gradle file is touched by this milestone.** GitHub branch protection turns the resulting `build` status check into a merge gate.
 
 **Tech Stack:** GitHub Actions, `actions/checkout@v4`, `actions/setup-java@v4` (Temurin 21), `gradle/actions/setup-gradle@v4`, `actions/upload-artifact@v4`, `gh` CLI for branch protection.
 
@@ -12,8 +12,8 @@
 
 - **Repository:** `andrey56097/tik-tak-toe` (public, viewer permission ADMIN).
 - **Working tree:** `/Users/andriibats/IdeaProjects/tik-tak-toe-m8`, branch `milestone-8`, branched from `main` at `f70ebe6`. The primary checkout `/Users/andriibats/IdeaProjects/tik-tak-toe` is occupied by another agent working on Milestone 6 (branch `milestone-6`, uncommitted gateway work) — **never run git or Gradle there.**
-- **Nothing this milestone merges may touch** any `build.gradle.kts`, any file under `*/src/**`, or `settings.gradle.kts`. Coverage and mutation thresholds are Milestone 7's subject matter, not this milestone's. The single exception is the throwaway test in Task 3, which lives on a branch that is deleted unmerged.
-- **Do not modify** `docs/tic-tac-toe-plan.md` — the user explicitly excluded the plan checkboxes from this milestone's scope.
+- **Nothing this milestone merges may touch** any `build.gradle.kts`, any file under `*/src/**`, or `../../settings.gradle.kts`. Coverage and mutation thresholds are Milestone 7's subject matter, not this milestone's. The single exception is the throwaway test in Task 3, which lives on a branch that is deleted unmerged.
+- **Do not modify** `../../docs/tic-tac-toe-plan.md` — the user explicitly excluded the plan checkboxes from this milestone's scope.
 - **The job id `build` is immutable once branch protection is enabled.** Branch protection stores the required check by name; renaming the job later produces a required check that can never report, which blocks every merge permanently.
 - **Commit only after the user explicitly says so.** Never `git commit` or `git push` on your own initiative (CLAUDE.md).
 - **Commit and PR titles start with `[MILESTONE-8]`.**
@@ -36,10 +36,10 @@ There is no substantive red in the baseline, so a blocking gate is safe from day
 
 ## File Structure
 
-- **Create** `.github/workflows/ci.yml` — the entire CI definition: triggers, JDK/Gradle setup, the single `./gradlew build` invocation, and failure-only report upload. One responsibility: gate the repository.
+- **Create** `../../.github/workflows/ci.yml` — the entire CI definition: triggers, JDK/Gradle setup, the single `./gradlew build` invocation, and failure-only report upload. One responsibility: gate the repository.
 - **Create** `docs/milestone-8-ci-plan.md` — this document.
-- **Modify** `README.md` on `main` — badge in the header block, a `## Continuous Integration` section, and a note in `### Test` about port 8761.
-- **Untouched:** every `build.gradle.kts`, every `src/**`, `.github/workflows/ai-review.yml`, `docs/tic-tac-toe-plan.md`.
+- **Modify** `../../README.md` on `main` — badge in the header block, a `## Continuous Integration` section, and a note in `### Test` about port 8761.
+- **Untouched:** every `build.gradle.kts`, every `src/**`, `../../.github/workflows/ai-review.yml`, `../../docs/tic-tac-toe-plan.md`.
 
 ---
 
@@ -90,7 +90,7 @@ rm /Users/andriibats/IdeaProjects/tik-tak-toe-m8/docs/milestone-8-ci-plan.md
 cd /Users/andriibats/IdeaProjects/tik-tak-toe-m8 && git status --short
 ```
 
-Expected: the only entry is the untracked `.github/workflows/ci.yml` (once Task 1 has written it). Keep the docs worktree — Task 5 reuses it.
+Expected: the only entry is the untracked `../../.github/workflows/ci.yml` (once Task 1 has written it). Keep the docs worktree — Task 5 reuses it.
 
 ---
 
@@ -106,7 +106,7 @@ Expected: the only entry is the untracked `.github/workflows/ci.yml` (once Task 
 
 - [ ] **Step 1: Write the workflow**
 
-Create `.github/workflows/ci.yml`:
+Create `../../.github/workflows/ci.yml`:
 
 ```yaml
 name: CI
@@ -179,7 +179,7 @@ Expected: `['build']` then `ubuntu-latest`. If the job id prints as anything oth
 
 - [ ] **Step 3: Dispatch the reviewer subagent**
 
-Review scope: `.github/workflows/ci.yml` against this plan and against CLAUDE.md. The reviewer writes no code. Points to check explicitly: job id is `build`; `upload-artifact` is guarded by `if: failure()` (an unguarded upload step never runs after a failed build — the exact case where the reports are needed); no Gradle or `src/**` file is touched; triggers do not double-run PR branches.
+Review scope: `../../.github/workflows/ci.yml` against this plan and against CLAUDE.md. The reviewer writes no code. Points to check explicitly: job id is `build`; `upload-artifact` is guarded by `if: failure()` (an unguarded upload step never runs after a failed build — the exact case where the reports are needed); no Gradle or `src/**` file is touched; triggers do not double-run PR branches.
 
 - [ ] **Step 4: Ask the user for permission to commit, then commit**
 
@@ -413,7 +413,7 @@ git fetch origin
 git rebase origin/main
 ```
 
-If Milestone 6 landed first, this pulls it in. Conflicts are not expected — this branch touches only `.github/workflows/ci.yml` and `docs/milestone-8-ci-plan.md`. If a conflict does appear, stop and report it rather than resolving it blind.
+If Milestone 6 landed first, this pulls it in. Conflicts are not expected — this branch touches only `../../.github/workflows/ci.yml` and `docs/milestone-8-ci-plan.md`. If a conflict does appear, stop and report it rather than resolving it blind.
 
 - [ ] **Step 2: Push the rebased branch and wait for green**
 
@@ -445,7 +445,7 @@ Expected: `success`. This is the run the README badge will point at.
 ### Task 5: Documentation, committed directly to `main`
 
 **Files:**
-- Modify: `README.md` — three separate edits (header badge, `### Test` note, new `## Continuous Integration` section)
+- Modify: `../../README.md` — three separate edits (header badge, `### Test` note, new `## Continuous Integration` section)
 
 Per CLAUDE.md, docs go straight to `main`, not through a branch. Do this **after** Task 4, because a badge for a workflow that is not yet on `main` renders as `no status`. Reuse the docs worktree from Task 0 and bring it up to date, so the primary checkout stays untouched:
 
@@ -456,7 +456,7 @@ git pull --ff-only origin main
 
 - [ ] **Step 1: Add the badge to the header block**
 
-In `README.md`, the centred badge block (currently `README.md:8-12` on `main`) ends with the License badge. Insert the CI badge as the **first** badge of that block, above the Java badge:
+In `../../README.md`, the centred badge block (currently `README.md:8-12` on `main`) ends with the License badge. Insert the CI badge as the **first** badge of that block, above the Java badge:
 
 ```markdown
 [![CI](https://github.com/andrey56097/tik-tak-toe/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/andrey56097/tik-tak-toe/actions/workflows/ci.yml)
@@ -549,4 +549,4 @@ Expected: only the primary checkout remains (plus whatever the Milestone 6 agent
 
 - **`eureka-server:test` binds port 8761 for real.** It makes `./gradlew build` unrunnable locally while the stack is up, which undercuts Milestone 7's promise of "one command runs the suite". The fix belongs to whoever owns that test (`webEnvironment = RANDOM_PORT` plus an assertion on the configured property, or a dedicated profile); this milestone only documents it.
 - **`game-session-service` has no JaCoCo plugin** — only `game-engine-service` does. So the 80% line-coverage floor currently gates one module while the mutation floor gates two. Adjusting that means editing `build.gradle.kts`, which is Milestone 7's territory.
-- **`docs/tic-tac-toe-plan.md` checkboxes for Milestone 8** are left unticked at the user's explicit request.
+- **`../../docs/tic-tac-toe-plan.md` checkboxes for Milestone 8** are left unticked at the user's explicit request.
