@@ -70,6 +70,18 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      # The ui-service module's `check` runs a Vitest suite over the static page
+      # (Milestone 10). It is a test-only toolchain — nothing here is shipped, and
+      # the served page still has no build step — but the runner needs Node for the
+      # Gradle build to reach it. `npm ci` itself is driven by the :ui-service:npmCi
+      # task from the lockfile, so nothing installs packages twice.
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ui-service/package-lock.json
+
       # `build` implies `check`; `check` depends on `pitest` in both the engine
       # and the session module, and on `jacocoTestCoverageVerification` in the
       # engine. One command is the whole gate: compile, test, coverage floor,
