@@ -26,6 +26,7 @@
   - [Prerequisites](#prerequisites)
   - [Build](#build)
   - [Run with Docker](#run-with-docker)
+  - [Run on Kubernetes](#run-on-kubernetes)
   - [Run from source](#run-from-source)
   - [Test](#test)
 - [Project Structure](#project-structure)
@@ -242,6 +243,69 @@ that fails. `KEEP_UP=true ./scripts/smoke.sh` leaves the stack running instead.
 > symptom looks like a page that loads without styles. `docker compose restart
 > eureka-server` clears the stale entries once the host processes are stopped.
 
+### Run on Kubernetes
+
+The same five images, deployed to a cluster. Nothing in the application changed
+to make this work: no Java, no `application.yml`. The container-only values that
+compose passes as environment variables are passed here by a ConfigMap, and
+**Eureka still does the service discovery** — Kubernetes only gives it a stable
+name to answer at.
+
+```bash
+minikube start
+minikube addons enable ingress
+./scripts/k8s-smoke.sh
+```
+
+That script is the whole path: it builds any missing image, loads all five into
+the cluster, applies [`k8s/`](k8s/), waits for every Deployment, plays a full
+game through the gateway and deletes everything again — exiting non-zero if any
+step fails. `KEEP_UP=true ./scripts/k8s-smoke.sh` leaves it running.
+
+To drive it by hand instead:
+
+```bash
+docker compose build                                  # if the images are not built yet
+for s in eureka-server game-engine-service game-session-service ui-service gateway; do
+  minikube image load tiktaktoe/$s:dev
+done
+kubectl apply -k k8s/
+```
+
+Then reach it either way:
+
+| Command | URL | Needs |
+|---|---|---|
+| `minikube tunnel` | **<http://localhost>** — through the Ingress, exactly as a browser would arrive | sudo |
+| `kubectl -n tik-tak-toe port-forward svc/gateway 8080:8080` | <http://localhost:8080> — straight to the gateway, bypassing the Ingress | nothing |
+
+`kubectl delete -k k8s/` removes the namespace and everything in it.
+
+**Loading the images takes a few minutes** — five images of roughly 600 MB each,
+transferred into the cluster one at a time. Nothing pushes them to a registry, so
+the manifests set `imagePullPolicy: IfNotPresent`: a Pod that decided to pull
+would fail, because there is nowhere to pull from.
+
+Three things are worth knowing before relying on this:
+
+- **The registry holds Pod IPs.** Clients register with
+  `EUREKA_INSTANCE_PREFER_IP_ADDRESS=true`, so a rescheduled Pod leaves a stale
+  entry until its lease expires. Small at one replica with a 5-second renewal,
+  and it is the honest cost of keeping client-side discovery inside a cluster
+  that has discovery of its own.
+- **Sessions live in memory.** A rolling update or an evicted Pod drops every
+  game in flight. The fix is a shared `SessionStore`, not a Kubernetes setting.
+- **Every service runs at one replica**, and for three different reasons: Eureka
+  has no peer configured, the engine's H2 database is inside its own Pod, and the
+  session store is in-memory. Only the UI is genuinely free to scale.
+
+There are **no Secrets** in the cluster. H2 runs in-memory with no password and
+the gateway has no credentials, so an applied-but-empty Secret would be
+decoration; [`k8s/secret.yaml.example`](k8s/secret.yaml.example) documents the
+mechanism instead, ready for the day the engine points at a real database. (The
+OpenRouter key used by the automated PR review is a *CI* secret and lives in
+GitHub Secrets — no deployed service reads it.)
+
 ### Run from source
 
 These are independent Spring Boot applications with no shared root project, so
@@ -401,7 +465,7 @@ logically, not where their priority would put them.
 | 8 | CI (build + test + quality) | beyond scope | GitHub Actions on every push/PR: build, unit + mutation tests, quality checks |
 | 9 | Docker + docker-compose | beyond scope | Whole stack up with one command — see [Run with Docker](#run-with-docker) |
 | 10 | Final polish & submission | **required** | README, code style, end-to-end verification |
-| 11 | Kubernetes readiness | beyond scope | Manifests to deploy the stack to a cluster when needed |
+| 11 | Kubernetes readiness | beyond scope | Manifests that deploy the stack to a cluster — see [Run on Kubernetes](#run-on-kubernetes) |
 
 Full details — version decisions, design patterns, and the assignment-requirements matrix — live in **[docs/tic-tac-toe-plan.md](docs/tic-tac-toe-plan.md)**.
 
@@ -492,7 +556,9 @@ second is optional direction.
 - **Persist history in a DB** — track session/move history and win/loss outcomes (who won/lost, over multiple games) instead of in-memory
 - **Circuit breaker** via `resilience4j-spring-boot4` — retries are in place; a breaker would stop hammering an Engine that is down for longer
 - **Observability**: MDC logging with `gameId`/`sessionId` correlation
-- **Kubernetes deployment** — readiness manifests (Milestone 11) to deploy the stack to a cluster when needed
+- **Discovery through Kubernetes itself** — the manifests in [`k8s/`](k8s/) keep Eureka, so the deployed system stays the one this README describes. A cluster already resolves `game-engine-service` through its own DNS, so a production deployment would drop the registry (or move to Spring Cloud Kubernetes) and delete a moving part
+- **A registry for the images** — nothing is published today, so the cluster is fed with `minikube image load`; a real deployment pulls tags that CI pushed
+- **Shared session state** — an in-memory `SessionStore` is what pins the session service to one replica and loses games on a rolling update
 
 ---
 

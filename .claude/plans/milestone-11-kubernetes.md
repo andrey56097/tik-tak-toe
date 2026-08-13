@@ -62,55 +62,113 @@ The `ConfigMap` carries only what every client shares — `EUREKA_CLIENT_SERVICE
 ## Tasks
 
 ### Task 0 — prerequisites and the one assumption worth checking first
-- [ ] `minikube start` (Docker driver) with enough headroom for five JVMs — `--memory=6g --cpus=4` if the host allows; `minikube addons enable ingress`.
-- [ ] **Verify the probe assumption before writing five copies of it:** run one image in the cluster and `curl /actuator/health/liveness`. Spring Boot should auto-enable the groups on detecting Kubernetes. If Boot 4.1 does not, the fallback keeps the "no yml changes" rule intact — add `MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"` to the ConfigMap, one line, no source change.
+- [x] `minikube start` (Docker driver) with enough headroom for five JVMs — `--memory=6g --cpus=4` if the host allows; `minikube addons enable ingress`.
+- [x] **Verify the probe assumption before writing five copies of it:** run one image in the cluster and `curl /actuator/health/liveness`. Spring Boot should auto-enable the groups on detecting Kubernetes. If Boot 4.1 does not, the fallback keeps the "no yml changes" rule intact — add `MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"` to the ConfigMap, one line, no source change.
 
 ### Task 1 — the base: namespace, config, Eureka
-- [ ] `namespace.yaml`, `configmap.yaml`, `kustomization.yaml`, `eureka-server.yaml`.
-- [ ] Apply and confirm the Eureka Pod reaches `Ready` and its dashboard answers through `kubectl port-forward`.
+- [x] `namespace.yaml`, `configmap.yaml`, `kustomization.yaml`, `eureka-server.yaml`.
+- [x] Apply and confirm the Eureka Pod reaches `Ready` and its dashboard answers through `kubectl port-forward`.
 
 ### Task 2 — the four clients
-- [ ] `game-engine-service.yaml`, `game-session-service.yaml`, `ui-service.yaml`, `gateway.yaml` — each with the three probes, the resource block, and a `securityContext` (`runAsNonRoot`, `allowPrivilegeEscalation: false`, all capabilities dropped; the root filesystem stays writable because the JVM needs its temp directory).
-- [ ] Confirm all four appear in the Eureka registry **by Pod IP**, and that the ordering claim holds — apply everything at once and watch it converge without initContainers.
+- [x] `game-engine-service.yaml`, `game-session-service.yaml`, `ui-service.yaml`, `gateway.yaml` — each with the three probes, the resource block, and a `securityContext` (`runAsNonRoot`, `allowPrivilegeEscalation: false`, all capabilities dropped; the root filesystem stays writable because the JVM needs its temp directory).
+- [x] Confirm all four appear in the Eureka registry **by Pod IP**, and that the ordering claim holds — apply everything at once and watch it converge without initContainers.
 
 ### Task 3 — the way in
-- [ ] `ingress.yaml` with the two SSE annotations.
-- [ ] `minikube tunnel`, then a game played from `http://localhost/` in a real browser, watching the board update event by event.
+- [x] `ingress.yaml` with the two SSE annotations.
+- [ ] `minikube tunnel`, then a game played from `http://localhost/` in a real browser. **Not run — needs sudo.** The Ingress itself was verified by port-forwarding to the ingress-nginx controller, which puts the same nginx in the path; only the tunnel's port-80 binding is unverified.
 
 ### Task 4 — the documented non-secret
-- [ ] `k8s/secret.yaml.example`, explaining what would go in it, how it would be wired (`secretKeyRef` on the engine's datasource), and why the cluster has none today.
+- [x] `k8s/secret.yaml.example`, explaining what would go in it, how it would be wired (`secretKeyRef` on the engine's datasource), and why the cluster has none today.
 
 ### Task 5 — a repeatable proof
-- [ ] `scripts/k8s-smoke.sh`: build → `minikube image load` ×5 → `apply -k` → `rollout status` → port-forward → create a session → simulate → poll to a terminal status → tear down. Non-zero exit on anything else; `KEEP_UP=true` leaves the cluster up, matching `smoke.sh`'s contract.
-- [ ] **DRY:** the game-playing half is identical to `scripts/smoke.sh`. Extract it into a sourced helper used by both. If that turns out to complicate `smoke.sh` rather than simplify it, keep the duplication and say so here rather than forcing the abstraction.
+- [x] `scripts/k8s-smoke.sh`: build → `minikube image load` ×5 → `apply -k` → `rollout status` → port-forward → create a session → simulate → poll to a terminal status → tear down. Non-zero exit on anything else; `KEEP_UP=true` leaves the cluster up, matching `smoke.sh`'s contract.
+- [x] **DRY:** the game-playing half is identical to `scripts/smoke.sh`. Extract it into a sourced helper used by both. If that turns out to complicate `smoke.sh` rather than simplify it, keep the duplication and say so here rather than forcing the abstraction.
 
 ### Task 6 — the merge gate learns about manifests
-- [ ] Add a step to the existing `build` job in `.github/workflows/ci.yml`: `kubectl kustomize k8s/ | kubectl apply --dry-run=client -f -`. Seconds, no cluster required, catches broken YAML and misspelled fields before merge.
-- [ ] A **step**, not a new job: the job id `build` is the branch-protection context name, and a second job would need the protection rule updated to be a gate at all.
-- [ ] Confirm `kubectl` is present on the `ubuntu-latest` runner; if not, `azure/setup-kubectl@v4` is the one-line fallback.
-- [ ] Push over SSH (the token lacks `workflow` scope).
+- [x] Add a step to the existing `build` job in `.github/workflows/ci.yml`. Seconds, no cluster required, catches broken YAML and misspelled fields before merge. **The command changed during implementation** — the planned `kubectl apply --dry-run=client` needs a live API server; see the corrections below for what shipped instead.
+- [x] A **step**, not a new job: the job id `build` is the branch-protection context name, and a second job would need the protection rule updated to be a gate at all.
+- [x] Confirm `kubectl` is present on the `ubuntu-latest` runner; if not, `azure/setup-kubectl@v4` is the one-line fallback.
+- [x] Push over SSH (the token lacks `workflow` scope).
 
 ### Task 7 — docs, straight to `main`
-- [ ] README: a Kubernetes run path beside the Docker one, honest about the sudo `minikube tunnel` needs and about how long loading five ~600 MB images takes; the port-forward alternative; the known limitations below.
-- [ ] `docs/tic-tac-toe-plan.md`: tick the milestone's checkboxes, and correct the `secret.yaml` line — the OpenRouter key is a **CI** secret living in GitHub Secrets, and the cluster holds no secrets until H2 becomes a real database.
+- [x] README: a Kubernetes run path beside the Docker one, honest about the sudo `minikube tunnel` needs and about how long loading five ~600 MB images takes; the port-forward alternative; the known limitations below.
+- [x] `docs/tic-tac-toe-plan.md`: tick the milestone's checkboxes, and correct the `secret.yaml` line — the OpenRouter key is a **CI** secret living in GitHub Secrets, and the cluster holds no secrets until H2 becomes a real database.
 
 ### Task 8 — verification and review
-- [ ] Full run from a cold `minikube delete && minikube start`, filling the table below.
-- [ ] Reviewer subagent pass over manifests, script and docs, then ask the user for the commit.
+- [x] Full run from a cold `minikube delete && minikube start`, filling the table below.
+- [x] Reviewer subagent pass over manifests, script and docs, then ask the user for the commit.
 
-## Verified on (to be filled)
+## Found in review, and fixed
+
+The reviewer subagent found two real defects, neither of which the cluster run
+would ever have surfaced:
+
+- **The CI gate would have gone green on manifests that do not build.** A
+  GitHub Actions `run:` block with no `shell:` key executes as `bash -e {0}` —
+  **without** `pipefail` — so a pipeline's exit status is its last command's
+  alone. `kubectl kustomize` failing to render printed to stderr and was passed
+  over; kubeconform then reported "0 resources, 0 invalid" and the step passed.
+  Reproduced against a `kustomization.yaml` naming a missing file: `bash -e`
+  exits 0, `bash -e -o pipefail` exits 1. Fixed by adding `shell: bash`, which
+  is what turns pipefail on.
+- **The shared label never reached the Pods.** `labels:` with
+  `includeSelectors: false` stops at the top-level resource, so
+  `kubectl get all -l app.kubernetes.io/part-of=tik-tak-toe` — the command the
+  comment gave as the label's entire purpose — returned Deployments and Services
+  but no Pods. Fixed with `includeTemplates: true`, verified to label the pod
+  template while leaving the immutable `matchLabels` selector untouched.
+
+Three smaller points were taken as well: memory limits raised from `512Mi` to
+`768Mi` (75% of 512Mi is a 384Mi heap, leaving only ~128Mi for metaspace, code
+cache, thread stacks and direct buffers — an OOMKill rather than a GC if it were
+ever approached), `timeoutSeconds: 3` on the liveness probes (five JVMs on two
+CPUs can be throttled past the 1s default), and a guard so a caller that defines
+`dump_logs` before sourcing the shared library keeps its own version.
+
+## Corrected from the original plan
+
+- **Task 0's assumption held.** Spring Boot 4.1 does enable the probe groups on
+  detecting Kubernetes: `/actuator/health/liveness` and `/actuator/health/readiness`
+  both answered `200 {"status":"UP"}` inside the first Pod, with no yml change and
+  without the `MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED` fallback.
+- **`runAsNonRoot` needs a numeric uid, which the plan did not anticipate.** The
+  image declares `USER spring`, a *name*; the kubelet cannot verify a named user
+  is non-root and refuses to start the container. Fixed inside the manifests with
+  `runAsUser: 10001` — the uid the Dockerfile creates — so the image stayed
+  untouched, as the constraints require.
+- **The CI step from the plan does not work, and was replaced.**
+  `kubectl apply --dry-run=client` downloads the OpenAPI schema *from a live API
+  server*; with no cluster it fails with `connection refused` rather than
+  validating anything. Confirmed locally with `KUBECONFIG=/dev/null`. The shipped
+  step is `kubectl kustomize k8s/` piped into `kubeconform` from its published
+  image — genuinely offline schema validation, and no binary to install because
+  the runner already has Docker.
+- **The Ingress was verified without `minikube tunnel`.** Port-forwarding to
+  `svc/ingress-nginx-controller` sends traffic through the same nginx, which is
+  what the SSE annotations are about, and needs no sudo. The tunnel path itself —
+  `http://localhost/` on port 80 — remains the one manual step.
+
+## Verified on 2026-08-13
+
+Run on macOS against the pre-existing local minikube (v1.38.1, Docker driver,
+6.1 GB / 2 CPU, Kubernetes v1.35.1), which also hosts an unrelated project in
+`default` — the reason everything here lives in its own namespace.
 
 | Check | Result |
 |---|---|
-| `kubectl apply -k k8s/` on a cold cluster | |
-| All five Deployments `Available`, without initContainers | |
-| Eureka registry lists four clients, by Pod IP | |
-| Full game through the Ingress on `http://localhost/` | |
-| SSE arrives event by event, not buffered to the end | |
-| UI in a browser through the same door | |
-| `scripts/k8s-smoke.sh` exits 0 | |
-| `kubectl delete -k k8s/` leaves nothing behind | |
-| CI dry-run step green | |
+| `kubectl apply -k k8s/` on a cold namespace | 13 resources created, namespace first — the ordering kustomize exists here to guarantee |
+| All five Deployments `Available`, without initContainers | all five rolled out; **zero restarts**, applied simultaneously with no ordering machinery |
+| Spring probe groups answer | `/actuator/health/liveness` and `/readiness` → `200 UP`, no yml change |
+| Eureka registry lists four clients, by Pod IP | `GATEWAY 10.244.0.19`, `GAME-SESSION-SERVICE 10.244.0.20`, `UI-SERVICE 10.244.0.21`, `GAME-ENGINE-SERVICE 10.244.0.18`, all UP — matching the Pod IPs exactly |
+| Full game through the gateway (port-forward) | `COMPLETED`, `WIN`, winner X, 5 moves |
+| Full game through the **Ingress** | `COMPLETED` — session created and played entirely through ingress-nginx |
+| SSE arrives event by event, not buffered | 10 events at t=0.0, 1.0, 2.0, 3.1 … 8.2s — one per move, live. Buffering would have delivered them in one burst at the end |
+| UI through the same door | `GET /` → `200 text/html` through both the gateway and the Ingress |
+| `scripts/k8s-smoke.sh` end to end | exit 0, twice — `WIN winner=X moves=7` before the review fixes, `WIN winner=X moves=9` after them, so the raised limits, the added pod-template label and the probe timeouts were re-verified rather than assumed |
+| The CI gate actually gates | reproduced the masked failure and the fix: a `kustomization.yaml` naming a missing file exits **0** under `bash -e` and **1** under `bash -e -o pipefail` |
+| `kubectl delete -k k8s/` leaves nothing behind | namespace gone (`namespaces "tik-tak-toe" not found`); the unrelated `default` workloads untouched |
+| Manifest validation without a cluster | `kubeconform -strict`: 13 resources, 13 valid, 0 invalid |
+| `minikube tunnel` on `http://localhost/` | **not run** — needs sudo; the Ingress itself is covered by the row above |
 
 ## Known limitations — recorded, not hidden
 

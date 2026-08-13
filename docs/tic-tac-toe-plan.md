@@ -537,13 +537,13 @@ This milestone closes the assignment's **"Testing & Validation"** section entire
 ---
 
 ### Milestone 11 — Kubernetes readiness (optional)
-- [ ] `k8s/` directory with manifests for each of the 5 services: `Deployment.yaml` + `Service.yaml`
-- [ ] `k8s/configmap.yaml` — shared config (service names/URLs, ports)
-- [ ] `k8s/secret.yaml` — credentials (H2 / OpenRouter / gateway), referenced as secrets, never committed
-- [ ] `k8s/ingress.yaml` — external access to the Gateway (port 8080)
-- [ ] Eureka works in-cluster via Kubernetes Service DNS (services register by cluster service name)
-- [ ] readiness/liveness probes on each Deployment; resource requests/limits
-- [ ] Verify with `kubectl apply -f k8s/` (optional, local kind/minikube)
+- [x] `k8s/` directory with manifests for each of the 5 services: `Deployment` + `Service` (one file per service)
+- [x] `k8s/configmap.yaml` — shared config (the Eureka client environment)
+- [x] ~~`k8s/secret.yaml` — credentials (H2 / OpenRouter / gateway)~~ → **`k8s/secret.yaml.example`, deliberately not applied.** The system has no cluster credentials: H2 is in-memory with no password and the gateway has none. OpenRouter *is* used — by `.github/scripts/ai-review.py` — but from GitHub Actions, so its key is a **CI** secret in GitHub Secrets and must not be copied into the cluster. The example file documents the mechanism for the day the engine points at a real database.
+- [x] `k8s/ingress.yaml` — external access to the Gateway (port 8080), with the `proxy-buffering: off` and `proxy-read-timeout: 130` annotations SSE needs to survive ingress-nginx
+- [x] Eureka works in-cluster — **kept as the discovery mechanism**, reached at the `eureka-server` Service name; clients register by Pod IP. Kubernetes DNS is used only to find the registry. Replacing Eureka with Service DNS is recorded as a production improvement, not done here: it would make the cluster deployment a different system from the compose one
+- [x] readiness/liveness probes on each Deployment (plus a `startupProbe`); resource requests/limits
+- [x] Verified on local minikube with `kubectl apply -k k8s/` and a full game — see `.claude/plans/milestone-11-kubernetes.md`
 
 **Result:** the stack can be deployed to a Kubernetes cluster when needed, with the same isolation + service-name communication as docker-compose.
 
