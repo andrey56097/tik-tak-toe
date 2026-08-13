@@ -24,6 +24,11 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    // Versions omitted deliberately: all three are managed by the Spring Boot BOM
+    // (verified 2026-08-13 — prometheus 1.17.0, tracing-bridge-otel 1.7.0, otlp 1.62.0).
+    implementation("io.micrometer:micrometer-registry-prometheus")
+    implementation("io.micrometer:micrometer-tracing-bridge-otel")
+    implementation("io.opentelemetry:opentelemetry-exporter-otlp")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("com.h2database:h2") // no version — managed by the Spring Boot BOM
     implementation(project(":common"))
