@@ -46,6 +46,36 @@ If partway through a "light" change you find yourself making a design call the u
 didn't already make, stop and either ask or escalate to the full process — don't let
 a light-path change quietly grow into an unreviewed architectural one.
 
+## Fast path — for heavy batches where per-task subagents cost more than they buy
+
+The user's default on a large milestone (many tests, several files, a long
+tail) is **write everything, run once, review once**. When the user asks for
+speed — or when the work is a long series of characterisation tests with no
+design decisions left — the orchestrating session may:
+
+1. **Write the tests and support code itself**, in the main session, using the
+   existing briefs/plan as the contract. No test subagent, no implementer
+   subagent, no per-task reviewer.
+2. **Run the suite once** (`./gradlew :<module>:integrationTest` and the unit
+   suite) and fix whatever is broken until it is green — before any review.
+   Proof of teeth still matters: if a test could pass vacuously, demonstrate it
+   fails under a deliberate perturbation (or justify why it cannot) in the
+   review package.
+3. **A single reviewer pass** at the end of the batch — one reviewer subagent
+   over the whole diff (tests + build wiring), not one per task.
+
+What the fast path does **not** relax (these stay mandatory, from the Rules
+below and CLAUDE.md): never commit without the user's explicit confirmation;
+never weaken an assertion to make a test pass (a failure is a finding about
+the system); never change `src/main` just to satisfy a test; code-quality
+checklist still applies; review still happens once before anything is committed;
+code still lives on a branch, not `main`.
+
+When to choose fast vs full: if the batch has even one task with a real design
+decision or brand-new production behaviour, that task goes full-process; the
+rest of the batch can still ride the fast path. If the user says "fast path" or
+"do it yourself / one run / one review", honour it over the default.
+
 ## Before you start — clarify first
 
 If the task's requirements are not fully pinned down, run the `grill-me` skill
@@ -132,7 +162,10 @@ of red-green ordering.
   changes to this skill file itself.
 - **The test-writer and the implementer must be two different subagent
   dispatches, every time** — never one agent doing both under the label "TDD",
-  no exceptions for "small" or "obvious" changes.
+  no exceptions for "small" or "obvious" changes. (Sole exception: the **Fast
+  path** above, where the orchestrating session writes the tests itself and the
+  user has explicitly traded per-task separation for speed. TDD still holds
+  wherever there is new production behaviour.)
 - **One implementer at a time** — never dispatch multiple implementers in parallel (file conflicts).
 - **TDD is non-negotiable** for this project — see CLAUDE.md → Testing Standards.
 - **code-quality is non-negotiable** — see CLAUDE.md → Code Quality Standards.
