@@ -12,3 +12,11 @@ eureka:
   server:
     enable-self-preservation: false
     eviction-interval-timer-in-ms: 5000
+
+# Only `health` is exposed over the web by default; the other four services all
+# declare `health,info` and this one did not, which left /actuator/info a 404.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

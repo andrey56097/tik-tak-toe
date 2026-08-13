@@ -1,0 +1,129 @@
+# The whole system, one command: `docker compose up --build`.
+#
+# Every service is built from the same docker/Dockerfile with a different MODULE,
+# and every container-only value lives here and only here — no application.yml in
+# this repository knows that Docker exists, so running the stack from an IDE keeps
+# working unchanged. Spring's relaxed binding maps the SCREAMING_SNAKE names below
+# onto the existing properties.
+#
+# Containers are isolated but reach each other over the default compose network by
+# service name; only the gateway (8080) and the Eureka dashboard (8761) are
+# published to the host, because Milestone 6 made 8080 the single entry point.
+
+# Pinned so container and network names do not change with the directory the
+# repository happens to sit in — this milestone is developed in a worktree.
+name: tik-tak-toe
+
+x-service-health: &service-health
+  # $$SERVER_PORT is escaped so the shell inside the container expands it rather
+  # than compose on the host. SERVER_PORT is also what Spring binds server.port
+  # from, so the probe and the server can never disagree about the port.
+  test: ["CMD-SHELL", "curl -fsS http://localhost:$$SERVER_PORT/actuator/health || exit 1"]
+  interval: 5s
+  timeout: 3s
+  retries: 24
+  start_period: 20s
+
+x-eureka-client: &eureka-client
+  EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+  # An instance registers under its hostname by default, which in Docker is the
+  # container id. The container's IP is always routable on the compose network
+  # and does not depend on hostname resolution or on one replica per service.
+  EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
+  # The default 30s registry fetch would make the first game after startup fail
+  # to resolve GAME-ENGINE-SERVICE. Five seconds matches the lease renewal the
+  # services already configure.
+  EUREKA_CLIENT_REGISTRYFETCHINTERVALSECONDS: "5"
+
+services:
+  eureka-server:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        MODULE: eureka-server
+    image: tiktaktoe/eureka-server:dev
+    environment:
+      SERVER_PORT: "8761"
+      # Eureka caches its registry responses for 30s by default, which delays
+      # every client's first successful lookup for no reason at this scale.
+      EUREKA_SERVER_RESPONSECACHEUPDATEINTERVALMS: "5000"
+    ports:
+      # Published for the demo: the dashboard is the proof that all four
+      # services registered.
+      - "8761:8761"
+    healthcheck: *service-health
+
+  game-engine-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        MODULE: game-engine-service
+    image: tiktaktoe/game-engine-service:dev
+    environment:
+      <<: *eureka-client
+      SERVER_PORT: "8081"
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    healthcheck: *service-health
+
+  game-session-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        MODULE: game-session-service
+    image: tiktaktoe/game-session-service:dev
+    environment:
+      <<: *eureka-client
+      SERVER_PORT: "8082"
+      # engine.client.base-url stays http://GAME-ENGINE-SERVICE: the engine is
+      # reached through Eureka by service id, never by container name. Docker
+      # networking and service discovery stay separate concerns.
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      game-engine-service:
+        condition: service_healthy
+    healthcheck: *service-health
+
+  ui-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        MODULE: ui-service
+    image: tiktaktoe/ui-service:dev
+    environment:
+      <<: *eureka-client
+      SERVER_PORT: "8083"
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    healthcheck: *service-health
+
+  gateway:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        MODULE: gateway
+    image: tiktaktoe/gateway:dev
+    environment:
+      <<: *eureka-client
+      SERVER_PORT: "8080"
+    ports:
+      # The only door into the system.
+      - "8080:8080"
+    depends_on:
+      game-session-service:
+        condition: service_healthy
+      ui-service:
+        condition: service_healthy
+    healthcheck: *service-health
+
+# No networks: block on purpose — compose puts all five on a project-scoped
+# bridge network and registers each service name as a DNS name there, which is
+# exactly the shared network this milestone calls for.
