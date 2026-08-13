@@ -43,10 +43,15 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-# Reads one value out of a JSON document on stdin. Kept to a fixed set of names
-# so no shell quoting ever reaches Python.
+# Reads one named value out of a JSON document on stdin. The field is a fixed
+# name rather than an expression, so no shell quoting ever reaches Python.
+#
+# The program goes in as an argument, never as a heredoc: `python3 - <<'PY'`
+# would take the program from stdin, which is exactly where the piped JSON has
+# to arrive. Only double quotes inside, so the whole thing survives the single
+# quotes that wrap it.
 json() {
-  python3 - "$1" <<'PY'
+  python3 -c '
 import json, sys
 
 doc = json.load(sys.stdin)
@@ -57,10 +62,11 @@ elif field == "status":
     print(doc["status"])
 elif field == "summary":
     game = doc.get("gameState") or {}
-    print(f"{game.get('status')} winner={game.get('winner')} moves={len(doc.get('moveHistory', []))}")
+    moves = len(doc.get("moveHistory", []))
+    print(game.get("status"), "winner=" + str(game.get("winner")), "moves=" + str(moves))
 else:
-    raise SystemExit(f"unknown field: {field}")
-PY
+    sys.exit("unknown field: " + field)
+' "$1"
 }
 
 echo "--- docker compose up (a cold run builds five images; expect ~10 minutes)"
