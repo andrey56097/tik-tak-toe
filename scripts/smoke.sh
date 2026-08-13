@@ -10,20 +10,28 @@
 #   ./scripts/smoke.sh              # up, play, down
 #   KEEP_UP=true ./scripts/smoke.sh # leave it running to poke at :8080 by hand
 #
+# The game itself lives in scripts/lib/game-smoke.sh, shared with k8s-smoke.sh:
+# a game through the gateway is the same game whichever way the stack was
+# deployed, and that is exactly what the two scripts exist to demonstrate.
+#
 set -euo pipefail
 
 BASE="${BASE:-http://localhost:8080}"
 KEEP_UP="${KEEP_UP:-false}"
-# A game is 5-9 moves one second apart, plus the engine round trips. The default
-# budget is comfortably above that and still fails fast if the stack is wedged.
-POLL_ATTEMPTS="${POLL_ATTEMPTS:-60}"
-POLL_INTERVAL="${POLL_INTERVAL:-2}"
 # A cold run builds five images, and they are built one at a time (see
 # docker/Dockerfile on why the Gradle cache mount is locked).
 UP_TIMEOUT="${UP_TIMEOUT:-900}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE=(docker compose -f "$ROOT_DIR/docker-compose.yml")
+
+# shellcheck source=lib/game-smoke.sh
+. "$ROOT_DIR/scripts/lib/game-smoke.sh"
+
+dump_logs() {
+  echo "--- last 50 log lines per service"
+  "${COMPOSE[@]}" logs --tail 50
+}
 
 cleanup() {
   local exit_code=$?
@@ -43,63 +51,7 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-# Reads one named value out of a JSON document on stdin. The field is a fixed
-# name rather than an expression, so no shell quoting ever reaches Python.
-#
-# The program goes in as an argument, never as a heredoc: `python3 - <<'PY'`
-# would take the program from stdin, which is exactly where the piped JSON has
-# to arrive. Only double quotes inside, so the whole thing survives the single
-# quotes that wrap it.
-json() {
-  python3 -c '
-import json, sys
-
-doc = json.load(sys.stdin)
-field = sys.argv[1]
-if field == "sessionId":
-    print(doc["sessionId"])
-elif field == "status":
-    print(doc["status"])
-elif field == "summary":
-    game = doc.get("gameState") or {}
-    moves = len(doc.get("moveHistory", []))
-    print(game.get("status"), "winner=" + str(game.get("winner")), "moves=" + str(moves))
-else:
-    sys.exit("unknown field: " + field)
-' "$1"
-}
-
 echo "--- docker compose up (a cold run builds five images; expect ~10 minutes)"
 "${COMPOSE[@]}" up --build --detach --wait --wait-timeout "$UP_TIMEOUT"
 
-echo "--- POST $BASE/sessions"
-SESSION_ID="$(curl -fsS -X POST "$BASE/sessions" | json sessionId)"
-echo "sessionId=$SESSION_ID"
-
-echo "--- POST $BASE/sessions/$SESSION_ID/simulate"
-curl -fsS -X POST "$BASE/sessions/$SESSION_ID/simulate" -o /dev/null -w 'accepted: HTTP %{http_code}\n'
-
-echo "--- waiting for a terminal session status"
-STATUS=""
-for _ in $(seq 1 "$POLL_ATTEMPTS"); do
-  BODY="$(curl -fsS "$BASE/sessions/$SESSION_ID")"
-  STATUS="$(printf '%s' "$BODY" | json status)"
-  case "$STATUS" in
-    COMPLETED)
-      echo "PASS: session COMPLETED — $(printf '%s' "$BODY" | json summary)"
-      exit 0
-      ;;
-    FAILED)
-      echo "FAIL: the session ended in FAILED"
-      printf '%s\n' "$BODY"
-      echo "--- last 50 log lines per service"
-      "${COMPOSE[@]}" logs --tail 50
-      exit 1
-      ;;
-  esac
-  sleep "$POLL_INTERVAL"
-done
-
-echo "FAIL: no terminal status within $((POLL_ATTEMPTS * POLL_INTERVAL))s (last seen: ${STATUS:-none})"
-"${COMPOSE[@]}" logs --tail 50
-exit 1
+play_game "$BASE"

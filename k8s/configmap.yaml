@@ -1,0 +1,33 @@
+# The three values every Eureka *client* shares — the same three that
+# docker-compose.yml keeps in its `x-eureka-client` anchor, for the same reasons.
+# No application.yml knows that Kubernetes exists, exactly as none of them knows
+# that Docker does: Spring's relaxed binding maps these SCREAMING_SNAKE names onto
+# the existing properties, so running the stack from an IDE keeps working.
+#
+# The Eureka server itself deliberately does not consume this ConfigMap. It runs
+# with register-with-eureka=false and fetch-registry=false, and handing a registry
+# server a client configuration is how you end up with a server trying to register
+# with itself.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: eureka-client
+data:
+  # Resolved by the cluster's DNS to the eureka-server Service. This is the only
+  # place Kubernetes' own discovery is used: to find the discovery server.
+  EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+
+  # An instance registers under its hostname by default, which in Kubernetes is
+  # the Pod name. A Pod IP is always routable from another Pod and does not
+  # depend on any DNS record existing for the Pod itself.
+  #
+  # The trade this accepts: the registry then holds addresses that die with the
+  # Pod. A rescheduled Pod leaves a stale entry until its lease expires. At one
+  # replica with a 5s renewal that window is small, and it is the honest cost of
+  # keeping client-side discovery inside a cluster that has its own.
+  EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
+
+  # The default 30s registry fetch would make the first game after startup fail
+  # to resolve GAME-ENGINE-SERVICE. Five seconds matches the lease renewal the
+  # services already configure in their application.yml.
+  EUREKA_CLIENT_REGISTRYFETCHINTERVALSECONDS: "5"

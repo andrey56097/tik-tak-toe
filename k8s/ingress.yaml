@@ -1,0 +1,35 @@
+# The only route in from outside the cluster, and it leads to the gateway alone.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tik-tak-toe
+  annotations:
+    # Without this, the SSE stream is broken rather than slow. ingress-nginx
+    # buffers upstream responses by default, so `text/event-stream` accumulates
+    # in nginx instead of reaching the browser — the board would sit empty and
+    # then jump to a finished game, or time out first. The gateway was already
+    # verified not to buffer it (Milestone 9); this is the second proxy in the
+    # chain and it needs telling separately.
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    # 130s, chosen to be the outermost link in a chain that must fire innermost
+    # first: the session emitter closes at 120s (session.stream.timeout-ms), the
+    # gateway's stream route allows 125s, and nginx allows 130s. Ordered the
+    # other way, a stream would die at the proxy and the client would see a
+    # transport error instead of a clean end-of-stream.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "130"
+spec:
+  ingressClassName: nginx
+  rules:
+    # No `host:` on purpose. A hostname would mean an /etc/hosts entry on every
+    # machine that wants to see this run, to prove nothing that matters here.
+    # Hostless, the rule matches any Host header, so `minikube tunnel` makes the
+    # whole system answer on http://localhost/ with no setup at all.
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway
+                port:
+                  name: http

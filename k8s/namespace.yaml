@@ -1,0 +1,7 @@
+# Everything this milestone creates lives here, so `kubectl delete -k k8s/`
+# takes the whole stack away and nothing else — the cluster this is developed on
+# is a shared local minikube that may already hold unrelated work.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tik-tak-toe

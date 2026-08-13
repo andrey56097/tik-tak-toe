@@ -27,6 +27,40 @@ jobs:
       - name: Check out the repository
         uses: actions/checkout@v7
 
+      # The manifests are configuration, so nothing in the Gradle build touches
+      # them and no unit test can. This is their check, and it runs before the
+      # long one: it costs seconds, and a broken manifest should not wait fifteen
+      # minutes behind the test suite to say so.
+      #
+      # Two commands, because they catch different things. `kubectl kustomize`
+      # resolves k8s/ exactly as `apply -k` does, so a missing file or a bad
+      # kustomization fails here. kubeconform then validates every resulting
+      # resource against the Kubernetes API schema — the misspelled field that
+      # YAML is happy with and the API server is not.
+      #
+      # kubeconform runs from its published image rather than a downloaded
+      # binary: the runner already has Docker, and an image tag pins the version
+      # without a checksum to maintain. `kubectl apply --dry-run=client` was the
+      # obvious alternative and does not work here — it downloads the OpenAPI
+      # schema from a live API server, so with no cluster it fails with
+      # "connection refused" rather than validating anything.
+      #
+      # A step in this job rather than a job of its own: the job id `build` is
+      # the branch-protection context name, so a second job would gate nothing
+      # until the protection rule was updated to require it too.
+      - name: Validate the Kubernetes manifests
+        # `shell: bash` is not cosmetic: a `run:` block without it is executed as
+        # `bash -e {0}`, with no `pipefail`, so a pipeline's exit status is its
+        # *last* command's alone. kustomize failing to render would then be
+        # printed to stderr and passed over, kubeconform would cheerfully report
+        # "0 resources, 0 invalid", and the step would go green on a manifest set
+        # that `kubectl apply -k` cannot even build. `shell: bash` adds
+        # `-o pipefail`, which is what makes the first half of this gate real.
+        shell: bash
+        run: |
+          kubectl kustomize k8s/ \
+            | docker run --rm -i ghcr.io/yannh/kubeconform:v0.7.0 -strict -summary
+
       - name: Set up JDK 21
         uses: actions/setup-java@v5
         with:

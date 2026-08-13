@@ -1,0 +1,128 @@
+# The service registry. Deployed first in kustomize's ordering only by accident
+# of resource kind — nothing here depends on start order, because every client
+# retries registration until this answers (see the note in game-engine-service.yaml).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: eureka-server
+spec:
+  # One replica, and not for simplicity's sake: this registry runs with no peer
+  # (`register-with-eureka: false`), so a second replica would be a second,
+  # separate registry holding half the instances rather than a redundant copy.
+  # Peer awareness is a configuration change, not a replica count.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: eureka-server
+  template:
+    metadata:
+      labels:
+        app: eureka-server
+    spec:
+      containers:
+        - name: eureka-server
+          image: tiktaktoe/eureka-server:dev
+          # Explicit, and load-bearing. Nothing pushes these images to a registry:
+          # they are built locally and pushed into the node with
+          # `minikube image load`. The default policy for a non-`latest` tag is
+          # already IfNotPresent, but leaving it implicit means a future retag to
+          # `:latest` would silently flip to Always and fail with ErrImagePull.
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8761
+          env:
+            # SERVER_PORT is what Spring binds server.port from, and the probes
+            # below address the port by name, so the two can never disagree.
+            - name: SERVER_PORT
+              value: "8761"
+            # Eureka caches its registry responses for 30s by default, which
+            # delays every client's first successful lookup for no reason at this
+            # scale. Server-side, so it lives here and not in the client ConfigMap.
+            - name: EUREKA_SERVER_RESPONSECACHEUPDATEINTERVALMS
+              value: "5000"
+
+          # Three probes, three different questions.
+          #
+          # startupProbe: "has the JVM finished booting?" It suspends the other
+          # two until it passes, which is what lets livenessProbe run on a short
+          # period afterwards without ever killing a container that is merely
+          # still starting. 45 x 2s = 90s of budget, against the ~20s a warm
+          # start takes and the longer one a cold, CPU-contended node gives.
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 2
+            failureThreshold: 45
+          # livenessProbe: "is this process broken beyond recovery?" It points at
+          # the liveness *group*, which reports the application's own state and
+          # nothing else. The composite /actuator/health would fold in the
+          # datasource and the discovery client, so a brief dependency outage
+          # would restart Pods instead of merely holding traffic back — the
+          # classic way to turn a small outage into a cluster-wide restart storm.
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 10
+            # Above the 1s default: this node runs five JVMs on two CPUs, each
+            # capped at one, so CFS throttling can stall a cheap in-memory read
+            # for longer than a second. A restart is an expensive answer to a
+            # scheduling hiccup.
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # readinessProbe: "should this Pod receive traffic right now?" This is
+          # the one that removes a Pod from its Service's endpoints, and it is
+          # why no initContainer is needed anywhere in this milestone.
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 3
+
+          # What makes the image's `-XX:MaxRAMPercentage=75.0` mean something:
+          # the heap is now sized from this limit rather than from the whole
+          # node's RAM. Requests are what the scheduler reserves; limits are the
+          # cgroup ceiling the JVM reads.
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 100m
+            limits:
+              memory: 768Mi
+              cpu: "1"
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            runAsNonRoot: true
+            # Required, and not redundant with the Dockerfile's `USER spring`.
+            # runAsNonRoot makes the kubelet *verify* the user is not root before
+            # starting the container, and it can only do that from a numeric id —
+            # a container whose image declares a user by name fails to start with
+            # "cannot verify user is non-root". 10001 is the uid the Dockerfile
+            # creates.
+            runAsUser: 10001
+            # readOnlyRootFilesystem is deliberately not set: the JVM and the
+            # embedded server both write to a temp directory, so a read-only root
+            # would need an emptyDir mounted at /tmp. That is a real hardening
+            # step, and it belongs with a hardening pass rather than smuggled in
+            # here untested.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: eureka-server
+spec:
+  # The name matters: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE in the ConfigMap
+  # resolves `eureka-server` through cluster DNS. This Service is the one piece
+  # of Kubernetes-native discovery the system uses — to find the discovery server.
+  selector:
+    app: eureka-server
+  ports:
+    - name: http
+      port: 8761
+      targetPort: http
