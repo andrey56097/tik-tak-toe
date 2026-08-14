@@ -680,7 +680,6 @@ Honest limits of the current deployable shape — not unfinished assignment item
 
 ### Optional direction
 
-- **Modular monolith as the alternative we did not take.** `task.md` names three components; they could have lived in one Spring Boot process with three packages — simpler to run, no Eureka, no Gateway, no distributed timeouts. We split them into independently deployable services (Engine rules, Session orchestration, UI, plus discovery and the gateway) so each can fail and scale on its own, which is the point of the exercise. Further splits (a History service, a dedicated Move service) would be over-decomposition for a 3×3 board.
 - **Minimax** move strategy instead of random (with alpha-beta pruning) — `MoveStrategy` is already the seam; random is v1.
 - **Early draw detection** — detect a draw before the board is full; a full-board check is currently sufficient for auto-play.
 - **Full reactive stack (WebFlux)** for Engine and Session — `task.md` imposes no reactivity constraint; both services are blocking MVC today, and Session → Engine uses synchronous `RestClient`.
