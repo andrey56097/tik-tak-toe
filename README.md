@@ -657,29 +657,45 @@ Failed runs upload test / JaCoCo / Pitest reports as `reports-<run_id>`. Success
 ## Possible Improvements
 
 Future work, deliberately outside the current scope. The first group is
-**known gaps in what is built** — each is a real limitation, not a wish; the
-second is optional direction.
+**known gaps in what is built** — each is a real limitation, not a wish. The
+second is optional direction and alternative designs.
 
 ### Known gaps
 
 Honest limits of the current deployable shape — not unfinished assignment items.
 
-- **Idempotent timeout recovery.** A retried Session → Engine write can hit a 409 after Engine already applied the move; the board stays correct, the session ends `FAILED`. Resume-from-Engine-state would close it.
-- **Open surface.** No auth / API rate limit (`task.md` has no user model). Session store has a hard capacity (503); Engine upsert can still create games by id.
-- **Engine retention.** Session TTL + capacity exist; Engine H2 retains every game for the process lifetime. Crash mid-simulation leaves an orphaned `IN_PROGRESS` game.
-- **Persistence for production.** In-memory H2 + `ddl-auto: update`. Swap path: Postgres + Flyway + `validate` (and H2 file mode for local durability).
-- **Ops pipeline.** Metrics and W3C traces are emitted; Compose does not ship Prometheus/Grafana/OTel Collector. CI builds and tests — it does not publish images or deploy.
-- **Contract polish.** `MoveRequest.player` is typed `CellState` (`EMPTY` rejected at validation); out-of-range `row`/`col` are 400 via `MoveValidator`, not Bean Validation bounds. One game per session (`sessionId` = `gameId`).
-- **UI visual regression.** Vitest covers render/SSE logic; layout/CSS defects still need a browser (Playwright) or manual check.
+- **Timeout recovery on Session → Engine.** A read timeout is retried, so a move Engine did apply can be submitted twice. Engine's turn check rejects the duplicate with a 409, so the board never corrupts — but the session ends `FAILED`. Turning that 409 into recovery (re-read the game, resume from Engine's state) closes it.
+- **Anyone can create games.** `POST /games/{gameId}/move` is an upsert, so any well-formed id materialises a game. That is what lets Session skip a separate create call, but it also means an unauthenticated caller can fill the store one id at a time. `task.md` specifies no authentication, so this waits for whatever auth arrives — or for a quota/eviction policy.
+- **Engine keeps every game.** `InMemorySessionStore` now sweeps finished sessions on a TTL and refuses new ones past a ceiling (503), but the Engine's H2 has no equivalent — every game ever played stays for the life of the process.
+- **Session crash mid-simulation orphans the game.** The Engine-side game stays `IN_PROGRESS` with no one driving it. Orchestration state is in-memory only; there is no idempotency key on the Session → Engine move call.
+- **`MoveRequest` carries no `row`/`col` bounds annotations.** Out-of-range coordinates are rejected by `MoveValidator` with a 400, so the contract holds, but the error reads as "cell not playable" rather than naming the offending field.
+- **`CellState` doubles as the player symbol.** `MoveRequest.player` is typed `CellState`, so `EMPTY` is syntactically expressible; it is rejected at validation with a 400 rather than by the type system. A separate `Player` type is the clean fix and a breaking contract change.
+- **No authentication and no rate limiting.** Every endpoint is open. Deliberate for an assignment with no user model, and the first thing to add before any real exposure — the session ceiling bounds memory, not abuse.
+- **No production database or schema migrations.** The Engine uses in-memory H2 with `ddl-auto: update`; production persistence needs Postgres, Flyway and `ddl-auto: validate`.
+- **No telemetry backend or operational response.** Metrics and traces are emitted, but Compose starts no OpenTelemetry Collector, Prometheus/Grafana dashboard, alert rules or incident runbook; set `OTEL_EXPORTER_OTLP_ENDPOINT` only after adding that pipeline.
+- **No release verification gate.** Before a deployment, run the full `./gradlew build --continue`, the Docker smoke scenarios and a deployment-specific health check; current CI validates code but does not publish an image or deploy it.
+- **One game per session, for ever.** `sessionId` doubles as `gameId`, as `task.md` permits, so a session cannot hold a second game.
+- **Cross-service trace correlation is unproven end to end.** The outbound client is instrumented (`http.client.requests`), which is what puts `traceparent` on the wire, and both services log `traceId`/`spanId` — but a successful game writes no application log lines, so a single id has not been observed in both logs at once.
+- **The browser code has no *visual* tests.** Milestone 10 added Vitest/jsdom tests over the page's logic — status wording, board layout, move formatting, and the SSE lifecycle including stream teardown on every failure path. What they cannot see is rendering: a real defect (marks jumping between grid rows, the glyph outgrowing its cell at large font sizes) was found by driving a browser by hand. Playwright remains the agreed direction for that, and stays open work.
 
 ### Optional direction
 
-- **Minimax** (or other `MoveStrategy`) instead of random
-- **Circuit breaker** (`resilience4j-spring-boot4`) on top of existing retries
-- **Message broker** between Session and Engine (today: synchronous `RestClient`)
-- **Shared session store** so Session can scale past one replica
-- **K8s-native discovery** (drop Eureka) + image registry for real cluster deploys
-- **Observability stack**: OTel Collector, Prometheus/Grafana, alerts
+- **Modular monolith as the alternative we did not take.** `task.md` names three components; they could have lived in one Spring Boot process with three packages — simpler to run, no Eureka, no Gateway, no distributed timeouts. We split them into independently deployable services (Engine rules, Session orchestration, UI, plus discovery and the gateway) so each can fail and scale on its own, which is the point of the exercise. Further splits (a History service, a dedicated Move service) would be over-decomposition for a 3×3 board.
+- **Minimax** move strategy instead of random (with alpha-beta pruning) — `MoveStrategy` is already the seam; random is v1.
+- **Early draw detection** — detect a draw before the board is full; a full-board check is currently sufficient for auto-play.
+- **Full reactive stack (WebFlux)** for Engine and Session — `task.md` imposes no reactivity constraint; both services are blocking MVC today, and Session → Engine uses synchronous `RestClient`.
+- **Message broker (Kafka / RabbitMQ) instead of synchronous REST.** Today Session calls Engine and waits. A timeout then retries a write that may already have landed (see Known gaps). A broker would turn that into `MoveCommand` in / `GameState` out: Session does not block on Engine's availability, a crash can resume from the last event, and several Session replicas can share one Engine without each holding an HTTP connection. Kafka fits if you want a durable, replayable log of moves; RabbitMQ fits if you only need a work queue. Either is heavier than nine REST calls for a finished game — the existing `GameEngineClient` port is what makes the swap possible without touching the orchestrator.
+- **Persistent H2 (file mode)** for Engine state recovery across restarts — a one-line JDBC URL change; still not a production database.
+- **Persist history in a DB** — track session/move history and win/loss outcomes across games instead of the in-memory `SessionStore`.
+- **Shared session state** — an in-memory `SessionStore` pins Session to one replica and loses games on a rolling update. A shared store (Redis / JDBC) is what lets Session scale horizontally.
+- **Multi-instance SSE** — `SseGameUpdatePublisher` holds emitters in a local map. If Session has more than one pod, the stream and the simulation can land on different instances. Redis/Rabbit pub-sub would fan the same `SessionResponse` out to every replica.
+- **Circuit breaker** via `resilience4j-spring-boot4` — retries already cover a brief blip; a breaker would stop hammering an Engine that is down for longer and fail fast with 503 instead of waiting out every retry budget.
+- **Durable workflow for simulations** — replace `@Async` + `Thread.sleep` with Temporal (or a message-driven state machine) so a pod restart does not orphan an `IN_PROGRESS` game.
+- **WebSocket + STOMP instead of SSE** — SSE matches one-way server → browser with a native `EventSource`. WebSocket wins the moment the browser must *send* on the same channel (pause / step / a human taking over) or when many clients need broker fan-out. The swap is a new `GameUpdatePublisher` plus the one line that feeds `render(state)`.
+- **Observability backend** — OpenTelemetry Collector, Prometheus/Grafana dashboards, alert rules and an incident runbook. Metrics and traces are already emitted; Compose just does not start the pipeline.
+- **Discovery through Kubernetes itself** — [`k8s/`](k8s/) still uses Eureka so the cluster matches Compose. A real cluster already resolves `game-engine-service` via DNS, so production would drop the registry (or move to Spring Cloud Kubernetes).
+- **An image registry and a deploy gate** — nothing is published today (`minikube image load`); CI tests the code but does not push a tag or deploy it.
+- **API Gateway rate limiting** — e.g. Redis token bucket via a Gateway `RequestRateLimiter`, on top of whatever auth arrives. The session ceiling bounds memory, not abuse.
 
 ---
 
